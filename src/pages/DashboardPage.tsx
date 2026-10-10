@@ -6,7 +6,6 @@ import {
   CalendarDays,
   CircleAlert,
   CircleCheck,
-  CirclePlus,
   CreditCard,
   Pencil,
   Tags,
@@ -15,7 +14,6 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
-
 import type { Account, Transaction } from "../db/database";
 import { formatMoney } from "../lib/money";
 import type { BalanceKindValue } from "./DashboardPage.styles";
@@ -191,7 +189,6 @@ function calculateBalanceAtDate(
 export function DashboardPage({
   accounts,
   transactions,
-  accountBalances,
   onNavigate,
   onNewTransaction,
   onNewAccount,
@@ -276,29 +273,6 @@ export function DashboardPage({
     ...chartData.flatMap((item) => [item.income, item.expenses]),
   );
 
-  const currentMonth = getMonthOffset(0);
-  const previousMonth = getMonthOffset(-1);
-
-  const currentItems = transactions.filter(
-    (transaction) =>
-      transaction.date.slice(0, 7) === currentMonth &&
-      transaction.date <= localDateKey(new Date()),
-  );
-
-  const previousItems = transactions.filter(
-    (transaction) => transaction.date.slice(0, 7) === previousMonth,
-  );
-
-  const currentIncome = sumTransactions(currentItems, "income");
-  const currentExpenses = sumTransactions(currentItems, "expense");
-  const previousExpenses = sumTransactions(previousItems, "expense");
-
-  const currentSavingsRate =
-    currentIncome > 0
-      ? ((currentIncome - currentExpenses) / currentIncome) * 100
-      : 0;
-
-  const expenseDifference = currentExpenses - previousExpenses;
 
   const recentTransactions = [...transactions]
     .sort((a, b) => {

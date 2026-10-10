@@ -3,53 +3,7 @@ import {
   useMemo,
   useState,
   type FormEvent,
-  type ReactNode,
 } from "react";
-
-import {
-  Activity,
-  ArrowDownLeft,
-  ArrowLeftRight,
-  ArrowUpRight,
-  Bell,
-  CalendarDays,
-  ChartNoAxesCombined,
-  Check,
-  ChevronDown,
-  CircleUserRound,
-  Download,
-  LayoutDashboard,
-  Moon,
-  Pencil,
-  Plus,
-  Search,
-  Sun,
-  Tags,
-  Trash2,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-  Wifi,
-  WifiOff,
-  X,
-  CreditCard,
-  Filter,
-  MoreHorizontal,
-  Utensils,
-  ShoppingCart,
-  Car,
-  ShoppingBag,
-  Film,
-  HeartPulse,
-  GraduationCap,
-  Receipt,
-  Zap,
-  House,
-  BriefcaseBusiness,
-  Repeat,
-  Plane,
-} from "lucide-react";
-
 import {
   db,
   DEFAULT_CATEGORIES,
@@ -62,18 +16,14 @@ import {
 import {
   calculateAccountBalances,
   currentMonth,
-  formatMoney,
   today,
   toCents,
 } from "./lib/money";
-
 import { downloadBackup } from "./lib/backup";
-
 import { AppLayout } from "./components/layout/AppLayout";
 import type { Page, Theme } from "./types/app";
 import { DashboardPage } from "./pages/DashboardPage";
 
-type Modal = "account" | "transaction" | "period" | null;
 type DashboardPeriod = "this-month" | "last-month" | "last-3-months" | "custom";
 
 type DateRange = {
@@ -136,20 +86,12 @@ function getTransactionDateRange(period: DashboardPeriod): DateRange {
   }
 }
 
-function formatTransactionDate(date: string) {
-  return new Date(`${date.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [online, setOnline] = useState(
+  const [_online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
 
@@ -157,7 +99,6 @@ function App() {
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
   const [monthFilter, setMonthFilter] = useState(currentMonth());
 
-  const [modal, setModal] = useState<Modal>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [transactionType, setTransactionType] =
     useState<TransactionType>("expense");
@@ -197,22 +138,6 @@ function App() {
   const [endDate, setEndDate] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
-
-  const [transactionFilterModal, setTransactionFilterModal] = useState<
-    "date" | "details" | "account" | null
-  >(null);
-
-  const [draftStartDate, setDraftStartDate] = useState("");
-  const [draftEndDate, setDraftEndDate] = useState("");
-  const [draftTypeFilter, setDraftTypeFilter] = useState<
-    "all" | Transaction["type"]
-  >("all");
-  const [draftCategoryFilter, setDraftCategoryFilter] = useState("all");
-  const [draftAccountFilter, setDraftAccountFilter] = useState("all");
-
-  const [openTransactionMenu, setOpenTransactionMenu] = useState<number | null>(
-    null,
-  );
 
   async function refresh() {
     let storedCategories = await db.categories.toArray();
