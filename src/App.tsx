@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   db,
   DEFAULT_CATEGORIES,
@@ -138,6 +133,10 @@ function App() {
   const [endDate, setEndDate] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
+
+  const [modal, setModal] = useState<
+    "account" | "transaction" | "custom-period" | null
+  >(null);
 
   async function refresh() {
     let storedCategories = await db.categories.toArray();
@@ -329,10 +328,14 @@ function App() {
   ]);
 
   const pageTitles: Record<Page, string> = {
-    dashboard: "Visão geral",
+    dashboard: "Dashboard",
     transactions: "Transações",
     accounts: "Contas",
+    cards: "Cartões",
+    recurring: "Recorrências",
     categories: "Categorias",
+    reports: "Relatórios",
+    settings: "Configurações",
   };
 
   function openNewTransaction() {
@@ -605,10 +608,9 @@ function App() {
             income={income}
             expenses={expenses}
             onNavigate={setPage}
-            onEditTransaction={(transaction) => {
-              setEditing(transaction);
-              setModal("transaction");
-            }}
+            onNewTransaction={openNewTransaction}
+            onNewAccount={() => setModal("account")}
+            onEditTransaction={openEditTransaction}
             onDeleteTransaction={deleteTransaction}
           />
         )}
