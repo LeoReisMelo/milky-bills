@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+
 import {
   Bell,
   Check,
@@ -75,6 +76,7 @@ export function Topbar({
 }: TopbarProps) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [readNotifications, setReadNotifications] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -145,11 +147,15 @@ export function Topbar({
           </IconButton>
 
           {openMenu === "notifications" && (
-            <Popover role="dialog" aria-label="Recent notifications">
+            <Popover
+              role="dialog"
+              aria-label="Recent notifications"
+              $menu="notifications"
+            >
               <PopoverHeader>
                 <h2>Notifications</h2>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div className="popover-header-actions">
                   {!readNotifications && (
                     <PopoverAction
                       type="button"
@@ -163,7 +169,7 @@ export function Topbar({
                     type="button"
                     aria-label="Close notifications"
                     onClick={() => setOpenMenu(null)}
-                    style={{ width: 28, height: 28 }}
+                    className="popover-close"
                   >
                     <X size={15} />
                   </IconButton>
@@ -185,7 +191,7 @@ export function Topbar({
                       <Check
                         size={14}
                         aria-label="Read"
-                        style={{ flexShrink: 0 }}
+                        className="read-indicator"
                       />
                     )}
                   </NotificationItem>
@@ -215,31 +221,18 @@ export function Topbar({
           </AvatarButton>
 
           {openMenu === "profile" && (
-            <Popover
-              role="menu"
-              aria-label="Profile menu"
-              style={{ width: 220 }}
-            >
+            <Popover role="menu" aria-label="Profile menu" $menu="profile">
               <PopoverHeader>
                 <div>
                   <h2>{profileName}</h2>
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 3,
-                      color: "var(--color-text-secondary)",
-                      fontSize: 11,
-                    }}
-                  >
-                    Personal account
-                  </span>
+                  <span className="profile-subtitle">Personal account</span>
                 </div>
 
                 <IconButton
                   type="button"
                   aria-label="Close profile menu"
                   onClick={() => setOpenMenu(null)}
-                  style={{ width: 28, height: 28 }}
+                  className="popover-close"
                 >
                   <X size={15} />
                 </IconButton>
@@ -263,10 +256,7 @@ export function Topbar({
               >
                 <UserRound size={16} />
                 My profile
-                <ChevronDown
-                  size={13}
-                  style={{ marginLeft: "auto", opacity: 0.5 }}
-                />
+                <ChevronDown size={13} className="profile-chevron" />
               </ProfileMenuItem>
             </Popover>
           )}
