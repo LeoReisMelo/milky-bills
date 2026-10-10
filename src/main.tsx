@@ -1,18 +1,12 @@
-
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-
+import React from "react";
+import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./styles.css";
+import { GlobalStyles } from "./styles/GlobalStyles";
+import "./styles/theme.css";
 
-const rootElement = document.getElementById("root");
-
-if (!rootElement) {
-  throw new Error('Elemento raiz "#root" não encontrado.');
-}
-
-createRoot(rootElement).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <GlobalStyles />
     <App />
-  </StrictMode>,
+  </React.StrictMode>,
 );

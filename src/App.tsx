@@ -1,61 +1,252 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+
 import {
   Activity,
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
+  Bell,
+  CalendarDays,
+  ChartNoAxesCombined,
+  Check,
+  ChevronDown,
+  CircleUserRound,
   Download,
   LayoutDashboard,
+  Moon,
+  Pencil,
   Plus,
   Search,
+  Sun,
+  Tags,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   Wallet,
   Wifi,
   WifiOff,
   X,
+  CreditCard,
+  Filter,
+  MoreHorizontal,
+  Utensils,
+  ShoppingCart,
+  Car,
+  ShoppingBag,
+  Film,
+  HeartPulse,
+  GraduationCap,
+  Receipt,
+  Zap,
+  House,
+  BriefcaseBusiness,
+  Repeat,
+  Plane,
 } from "lucide-react";
 
-import { db, type Account, type Transaction } from "./db/database";
-import { currentMonth, formatMoney, today, toCents } from "./lib/money";
+import {
+  db,
+  DEFAULT_CATEGORIES,
+  type Account,
+  type Category,
+  type Transaction,
+  type TransactionType,
+} from "./db/database";
 
-type Page = "dashboard" | "transactions" | "accounts";
+import {
+  calculateAccountBalances,
+  currentMonth,
+  formatMoney,
+  today,
+  toCents,
+} from "./lib/money";
 
-const categories = [
-  "Moradia",
-  "Alimentação",
-  "Transporte",
-  "Saúde",
-  "Lazer",
-  "Educação",
-  "Salário",
-  "Investimentos",
-  "Outros",
-];
+import { downloadBackup } from "./lib/backup";
 
-export default function App() {
+import { AppLayout } from "./components/layout/AppLayout";
+import type { Page, Theme } from "./types/app";
+import { DashboardPage } from "./pages/DashboardPage";
+
+type Modal = "account" | "transaction" | "period" | null;
+type DashboardPeriod = "this-month" | "last-month" | "last-3-months" | "custom";
+
+type DateRange = {
+  start: string;
+  end: string;
+};
+
+type MonthlyData = {
+  month: string;
+  label: string;
+  income: number;
+  expenses: number;
+};
+
+function monthStart(offset = 0) {
+  const now = new Date();
+  const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function monthEnd(offset = 0) {
+  const now = new Date();
+  const date = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function parseInitialBalance(value: string | number): number {
+  const normalized = String(value)
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/^R\$/i, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  const amount = Number(normalized);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Informe um saldo inicial válido.");
+  }
+
+  return toCents(amount);
+}
+
+function normalizeCategoryName(name: string) {
+  return name.trim().normalize("NFKC").toLocaleLowerCase("pt-BR");
+}
+
+function getTransactionDateRange(period: DashboardPeriod): DateRange {
+  switch (period) {
+    case "last-month":
+      return { start: monthStart(-1), end: monthEnd(-1) };
+
+    case "last-3-months":
+      return { start: monthStart(-2), end: today() };
+
+    default:
+      return { start: monthStart(), end: today() };
+  }
+}
+
+function formatTransactionDate(date: string) {
+  return new Date(`${date.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [online, setOnline] = useState(navigator.onLine);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | Transaction["type"]>(
-    "all",
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [online, setOnline] = useState(
+    typeof navigator === "undefined" ? true : navigator.onLine,
   );
+
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
   const [monthFilter, setMonthFilter] = useState(currentMonth());
-  const [modal, setModal] = useState<"account" | "transaction" | null>(null);
+
+  const [modal, setModal] = useState<Modal>(null);
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [transactionType, setTransactionType] =
+    useState<TransactionType>("expense");
+
+  const [categoryName, setCategoryName] = useState("");
   const [notice, setNotice] = useState("");
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      const savedTheme = localStorage.getItem("milky-bills-theme");
+
+      return savedTheme === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+
+    try {
+      localStorage.setItem("milky-bills-theme", theme);
+    } catch {
+      // A aplicação continua funcionando mesmo se o armazenamento estiver indisponível.
+    }
+  }, [theme]);
+
+  const [dashboardPeriod, setDashboardPeriod] =
+    useState<DashboardPeriod>("this-month");
+  const [chartMonths, setChartMonths] = useState<3 | 6 | 12>(6);
+
+  const [customPeriodStart, setCustomPeriodStart] = useState(monthStart());
+  const [customPeriodEnd, setCustomPeriodEnd] = useState(today());
+  const [appliedCustomStart, setAppliedCustomStart] = useState(monthStart());
+  const [appliedCustomEnd, setAppliedCustomEnd] = useState(today());
+
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
+
+  const [transactionFilterModal, setTransactionFilterModal] = useState<
+    "date" | "details" | "account" | null
+  >(null);
+
+  const [draftStartDate, setDraftStartDate] = useState("");
+  const [draftEndDate, setDraftEndDate] = useState("");
+  const [draftTypeFilter, setDraftTypeFilter] = useState<
+    "all" | Transaction["type"]
+  >("all");
+  const [draftCategoryFilter, setDraftCategoryFilter] = useState("all");
+  const [draftAccountFilter, setDraftAccountFilter] = useState("all");
+
+  const [openTransactionMenu, setOpenTransactionMenu] = useState<number | null>(
+    null,
+  );
 
   async function refresh() {
-    const [a, t] = await Promise.all([
+    let storedCategories = await db.categories.toArray();
+
+    if (storedCategories.length === 0) {
+      await db.categories.bulkAdd(
+        DEFAULT_CATEGORIES.map((name) => ({
+          name,
+          createdAt: new Date().toISOString(),
+        })),
+      );
+
+      storedCategories = await db.categories.toArray();
+    }
+
+    const [storedAccounts, storedTransactions] = await Promise.all([
       db.accounts.toArray(),
-      db.transactions.orderBy("date").reverse().toArray(),
+      db.transactions.toArray(),
     ]);
 
-    setAccounts(a);
-    setTransactions(t);
+    setAccounts(storedAccounts);
+
+    setTransactions(
+      storedTransactions.sort((a, b) => b.date.localeCompare(a.date)),
+    );
+
+    setCategories(
+      storedCategories.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    );
   }
 
   useEffect(() => {
+    // O carregamento inicial lê o IndexedDB e sincroniza os estados da aplicação.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
 
     const handleOnline = () => setOnline(true);
@@ -70,31 +261,22 @@ export default function App() {
     };
   }, []);
 
-  const accountBalances = useMemo(() => {
-    const balances = new Map<number, number>();
+  useEffect(() => {
+    if (!notice) return;
 
-    for (const account of accounts) {
-      if (account.id !== undefined) {
-        balances.set(account.id, account.initialBalance);
-      }
-    }
+    const timeout = window.setTimeout(() => setNotice(""), 4000);
 
-    for (const transaction of transactions) {
-      const previous = balances.get(transaction.accountId) ?? 0;
-      const delta =
-        transaction.type === "income"
-          ? transaction.amount
-          : -transaction.amount;
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
-      balances.set(transaction.accountId, previous + delta);
-    }
+  const accountBalances = useMemo(
+    () => calculateAccountBalances(accounts, transactions),
+    [accounts, transactions],
+  );
 
-    return balances;
-  }, [accounts, transactions]);
-
-  const totalBalance = [...accountBalances.values()].reduce(
-    (sum, value) => sum + value,
-    0,
+  const totalBalance = useMemo(
+    () => [...accountBalances.values()].reduce((sum, value) => sum + value, 0),
+    [accountBalances],
   );
 
   const monthTransactions = transactions.filter(
@@ -109,753 +291,405 @@ export default function App() {
     .filter((transaction) => transaction.type === "expense")
     .reduce((sum, transaction) => sum + transaction.amount, 0);
 
-  const filteredTransactions = transactions.filter((transaction) => {
-    const matchesSearch = [transaction.description, transaction.category].some(
-      (value) => value.toLowerCase().includes(search.toLowerCase()),
+  const dashboardRange = useMemo<DateRange>(() => {
+    if (dashboardPeriod === "custom") {
+      return { start: appliedCustomStart, end: appliedCustomEnd };
+    }
+
+    return getTransactionDateRange(dashboardPeriod);
+  }, [dashboardPeriod, appliedCustomStart, appliedCustomEnd]);
+
+  const dashboardSummary = useMemo(() => {
+    const periodTransactions = transactions.filter(
+      (transaction) =>
+        transaction.date >= dashboardRange.start &&
+        transaction.date <= dashboardRange.end,
     );
 
-    const matchesType = typeFilter === "all" || transaction.type === typeFilter;
+    const income = periodTransactions
+      .filter((transaction) => transaction.type === "income")
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
 
-    const matchesMonth =
-      !monthFilter || transaction.date.startsWith(monthFilter);
+    const expenses = periodTransactions
+      .filter((transaction) => transaction.type === "expense")
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
 
-    return matchesSearch && matchesType && matchesMonth;
-  });
+    return {
+      income,
+      expenses,
+      available: income - expenses,
+      count: periodTransactions.length,
+    };
+  }, [transactions, dashboardRange]);
 
-  async function saveAccount(form: HTMLFormElement) {
-    const data = new FormData(form);
-    const name = String(data.get("name") ?? "").trim();
-    const type = String(data.get("type") ?? "checking") as Account["type"];
-    const initialBalance = toCents(String(data.get("initialBalance") ?? "0"));
+  const chartData = useMemo<MonthlyData[]>(() => {
+    const now = new Date();
 
-    if (!name) throw new Error("Informe o nome da conta.");
+    return Array.from({ length: chartMonths }, (_, index) => {
+      const offset = index - chartMonths + 1;
+      const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+
+      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+      const monthTransactions = transactions.filter(
+        (transaction) => transaction.date.slice(0, 7) === month,
+      );
+
+      return {
+        month,
+        label: date
+          .toLocaleDateString("pt-BR", { month: "short" })
+          .replace(".", ""),
+        income: monthTransactions
+          .filter((transaction) => transaction.type === "income")
+          .reduce((sum, transaction) => sum + transaction.amount, 0),
+        expenses: monthTransactions
+          .filter((transaction) => transaction.type === "expense")
+          .reduce((sum, transaction) => sum + transaction.amount, 0),
+      };
+    });
+  }, [transactions, chartMonths]);
+
+  const chartMax = Math.max(
+    1,
+    ...chartData.flatMap((item) => [item.income, item.expenses]),
+  );
+
+  const filteredTransactions = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
+
+    return transactions.filter((transaction) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        transaction.description
+          .toLocaleLowerCase("pt-BR")
+          .includes(normalizedSearch);
+
+      const matchesType =
+        typeFilter === "all" || transaction.type === typeFilter;
+
+      const matchesMonth =
+        !monthFilter || transaction.date.slice(0, 7) === monthFilter;
+
+      const matchesDate =
+        (!startDate || transaction.date >= startDate) &&
+        (!endDate || transaction.date <= endDate);
+
+      const matchesCategory =
+        categoryFilter === "all" || transaction.category === categoryFilter;
+
+      const matchesAccount =
+        accountFilter === "all" ||
+        String(transaction.accountId) === accountFilter;
+
+      const matchesPeriod = startDate || endDate ? matchesDate : matchesMonth;
+
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesPeriod &&
+        matchesCategory &&
+        matchesAccount
+      );
+    });
+  }, [
+    transactions,
+    search,
+    typeFilter,
+    monthFilter,
+    startDate,
+    endDate,
+    categoryFilter,
+    accountFilter,
+  ]);
+
+  const pageTitles: Record<Page, string> = {
+    dashboard: "Visão geral",
+    transactions: "Transações",
+    accounts: "Contas",
+    categories: "Categorias",
+  };
+
+  function openNewTransaction() {
+    setEditing(null);
+    setTransactionType("expense");
+    setModal("transaction");
+  }
+
+  function openTransactionWithType(type: TransactionType) {
+    setEditing(null);
+    setTransactionType(type);
+    setModal("transaction");
+  }
+
+  function openEditTransaction(transaction: Transaction) {
+    setEditing(transaction);
+    setTransactionType(transaction.type);
+    setModal("transaction");
+  }
+
+  function closeModal() {
+    setModal(null);
+    setEditing(null);
+    setTransactionType("expense");
+  }
+
+  async function saveAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim();
+    const type = String(form.get("type") ?? "checking") as Account["type"];
+
+    let initialBalance: number;
+
+    try {
+      initialBalance = parseInitialBalance(
+        String(form.get("initialBalance") ?? "0"),
+      );
+    } catch {
+      setNotice("Informe um saldo inicial válido.");
+      return;
+    }
+
+    if (!name) {
+      setNotice("Informe o nome da conta.");
+      return;
+    }
 
     await db.accounts.add({
       name,
       type,
       initialBalance,
-      createdAt: new Date().toISOString(),
-    });
+    } as Account);
 
     await refresh();
-    setModal(null);
-    setNotice("Conta criada.");
+    closeModal();
+    setNotice("Conta criada com sucesso.");
   }
 
-  async function saveTransaction(form: HTMLFormElement) {
-    const data = new FormData(form);
-    const accountId = Number(data.get("accountId"));
-    const description = String(data.get("description") ?? "").trim();
-    const type = String(data.get("type") ?? "expense") as Transaction["type"];
-    const category = String(data.get("category") ?? "Outros");
-    const date = String(data.get("date") ?? today());
-    const amount = toCents(String(data.get("amount") ?? ""));
+  async function saveTransaction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-    if (!description) throw new Error("Informe a descrição.");
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error("Informe um valor maior que zero.");
+    const form = new FormData(event.currentTarget);
+    const description = String(form.get("description") ?? "").trim();
+    const accountId = Number(form.get("accountId"));
+    const amountText = String(form.get("amount") ?? "").trim();
+    const date = String(form.get("date") ?? today());
+    const destinationAccountIdValue = String(
+      form.get("destinationAccountId") ?? "",
+    );
+
+    const normalizedAmount = amountText
+      .replace(/\s/g, "")
+      .replace(/^R\$/i, "")
+      .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+      .replace(",", ".");
+
+    const amountInReais = Number(normalizedAmount);
+    const amount = toCents(amountInReais);
+
+    if (!description || !Number.isFinite(amountInReais) || amountInReais <= 0) {
+      setNotice("Informe uma descrição e um valor válido.");
+      return;
     }
+
     if (!accounts.some((account) => account.id === accountId)) {
-      throw new Error("Selecione uma conta válida.");
+      setNotice("Selecione uma conta válida.");
+      return;
     }
 
-    const record: Transaction = {
-      accountId,
+    if (!date) {
+      setNotice("Selecione a data da transação.");
+      return;
+    }
+
+    const category = String(form.get("category") ?? "");
+
+    if (transactionType !== "transfer") {
+      if (!categories.some((item) => item.name === category)) {
+        setNotice("Selecione uma categoria válida.");
+        return;
+      }
+    }
+
+    let destinationAccountId: number | undefined;
+
+    if (transactionType === "transfer") {
+      destinationAccountId = Number(destinationAccountIdValue);
+
+      if (
+        !accounts.some((account) => account.id === destinationAccountId) ||
+        destinationAccountId === accountId
+      ) {
+        setNotice("Selecione uma conta de destino diferente da origem.");
+        return;
+      }
+    }
+
+    const transactionData = {
       description,
-      type,
-      category,
-      date,
+      type: transactionType,
       amount,
-      createdAt: editing?.createdAt ?? new Date().toISOString(),
+      date,
+      accountId,
+      category: transactionType === "transfer" ? "" : category,
+      ...(destinationAccountId !== undefined ? { destinationAccountId } : {}),
     };
 
     if (editing?.id !== undefined) {
-      await db.transactions.update(editing.id, record);
+      await db.transactions.update(editing.id, transactionData);
     } else {
-      await db.transactions.add(record);
+      await db.transactions.add(transactionData as Transaction);
     }
 
     await refresh();
-    setModal(null);
-    setEditing(null);
-    setNotice("Transação salva.");
+    closeModal();
+    setNotice(editing ? "Transação atualizada." : "Transação registrada.");
+  }
+
+  async function saveCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = categoryName.trim();
+
+    if (!name) {
+      setNotice("Informe o nome da categoria.");
+      return;
+    }
+
+    if (
+      categories.some(
+        (category) =>
+          normalizeCategoryName(category.name) === normalizeCategoryName(name),
+      )
+    ) {
+      setNotice("Essa categoria já existe.");
+      return;
+    }
+
+    await db.categories.add({ name } as Category);
+
+    setCategoryName("");
+    await refresh();
+    setNotice("Categoria adicionada.");
+  }
+
+  async function deleteCategory(category: Category) {
+    const used = transactions.some(
+      (transaction) => transaction.category === category.name,
+    );
+
+    if (used) {
+      setNotice(
+        "Essa categoria está vinculada a transações e não pode ser excluída.",
+      );
+      return;
+    }
+
+    if (!window.confirm(`Excluir a categoria "${category.name}"?`)) return;
+
+    if (category.id !== undefined) {
+      await db.categories.delete(category.id);
+    }
+
+    await refresh();
+    setNotice("Categoria excluída.");
   }
 
   async function deleteTransaction(transaction: Transaction) {
-    if (!window.confirm(`Excluir "${transaction.description}"?`)) return;
+    if (!window.confirm(`Excluir a transação "${transaction.description}"?`)) {
+      return;
+    }
 
     if (transaction.id !== undefined) {
       await db.transactions.delete(transaction.id);
-      await refresh();
-      setNotice("Transação excluída.");
     }
+
+    await refresh();
+    setNotice("Transação excluída.");
   }
 
   async function deleteAccount(account: Account) {
-    if (account.id === undefined) return;
+    const used = transactions.some(
+      (transaction) =>
+        transaction.accountId === account.id ||
+        transaction.destinationAccountId === account.id,
+    );
 
-    const hasTransactions = await db.transactions
-      .where("accountId")
-      .equals(account.id)
-      .count();
-
-    if (hasTransactions > 0) {
-      setNotice("Exclua ou mova as transações dessa conta primeiro.");
+    if (used) {
+      setNotice(
+        "Essa conta está vinculada a transações e não pode ser excluída.",
+      );
       return;
     }
 
     if (!window.confirm(`Excluir a conta "${account.name}"?`)) return;
 
-    await db.accounts.delete(account.id);
+    if (account.id !== undefined) {
+      await db.accounts.delete(account.id);
+    }
+
     await refresh();
     setNotice("Conta excluída.");
   }
 
   async function exportData() {
-    const data = {
-      app: "Milky Bills",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      accounts: await db.accounts.toArray(),
-      transactions: await db.transactions.toArray(),
-    };
+    try {
+      await downloadBackup();
+      setNotice("Backup exportado com sucesso.");
+    } catch {
+      setNotice("Não foi possível exportar o backup.");
+    }
+  }
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
+  function applyCustomPeriod(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `milky-bills-${today()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setNotice("Backup exportado.");
+    if (
+      !customPeriodStart ||
+      !customPeriodEnd ||
+      customPeriodStart > customPeriodEnd
+    ) {
+      setNotice("Selecione um intervalo de datas válido.");
+      return;
+    }
+
+    setAppliedCustomStart(customPeriodStart);
+    setAppliedCustomEnd(customPeriodEnd);
+    setDashboardPeriod("custom");
+    setModal(null);
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <a
-          className="brand"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            setPage("dashboard");
-          }}
-        >
-          <span className="brand-mark">M</span>
-          <span>
-            milky <b>bills</b>
-          </span>
-        </a>
-
-        <p className="eyebrow">FINANÇAS PESSOAIS</p>
-
-        <nav className="navigation">
-          <NavItem
-            active={page === "dashboard"}
-            icon={<LayoutDashboard size={18} />}
-            label="Dashboard"
-            onClick={() => setPage("dashboard")}
-          />
-          <NavItem
-            active={page === "transactions"}
-            icon={<Activity size={18} />}
-            label="Transações"
-            onClick={() => setPage("transactions")}
-          />
-          <NavItem
-            active={page === "accounts"}
-            icon={<Wallet size={18} />}
-            label="Contas"
-            onClick={() => setPage("accounts")}
-          />
-        </nav>
-
-        <div className="sidebar-bottom">
-          <span className={`connection ${online ? "" : "offline"}`}>
-            {online ? <Wifi size={15} /> : <WifiOff size={15} />}
-            {online ? "Conectado" : "Modo offline"}
-          </span>
-          <button className="button-secondary full-width" onClick={exportData}>
-            <Download size={16} /> Exportar backup
-          </button>
-          <small>Milky Bills · V1 local-first</small>
-        </div>
-      </aside>
-
-      <section className="main-content">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">MILKY / BILLS</p>
-            <h1>
-              {page === "dashboard"
-                ? "Visão geral"
-                : page === "transactions"
-                  ? "Transações"
-                  : "Contas"}
-            </h1>
-          </div>
-
-          <button
-            className="button-primary"
-            onClick={() => {
-              setEditing(null);
-              setModal(page === "accounts" ? "account" : "transaction");
-            }}
-          >
-            <Plus size={17} />
-            <span>{page === "accounts" ? "Nova conta" : "Nova transação"}</span>
-          </button>
-        </header>
-
-        {notice && (
-          <div className="notice" role="status">
-            <span>{notice}</span>
-            <button aria-label="Fechar aviso" onClick={() => setNotice("")}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
-
+    <AppLayout
+      page={page}
+      darkMode={theme === "dark"}
+      onToggleTheme={() => {
+        setTheme((current) => (current === "dark" ? "light" : "dark"));
+      }}
+      onNavigate={setPage}
+    >
+      <div className="page-content">
         {page === "dashboard" && (
-          <>
-            <section className="balance-card">
-              <div>
-                <p className="muted">Saldo consolidado</p>
-                <h2>{formatMoney(totalBalance)}</h2>
-                <span className="balance-caption">
-                  {accounts.length}{" "}
-                  {accounts.length === 1
-                    ? "conta cadastrada"
-                    : "contas cadastradas"}
-                </span>
-              </div>
-              <div className="balance-symbol">
-                <Wallet size={30} />
-              </div>
-            </section>
-
-            <section className="stats-grid">
-              <StatCard
-                label="Receitas do mês"
-                value={formatMoney(income)}
-                icon={<ArrowDownLeft size={19} />}
-                kind="income"
-              />
-              <StatCard
-                label="Despesas do mês"
-                value={formatMoney(expenses)}
-                icon={<ArrowUpRight size={19} />}
-                kind="expense"
-              />
-            </section>
-
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Transações recentes</h2>
-                  <p className="muted">Últimos lançamentos registrados</p>
-                </div>
-                <button
-                  className="text-button"
-                  onClick={() => setPage("transactions")}
-                >
-                  Ver todas
-                </button>
-              </div>
-              <TransactionList
-                transactions={transactions.slice(0, 5)}
-                accounts={accounts}
-                onEdit={(transaction) => {
-                  setEditing(transaction);
-                  setModal("transaction");
-                }}
-                onDelete={deleteTransaction}
-              />
-            </section>
-
-            <section className="panel">
-              <div className="panel-heading">
-                <div>
-                  <h2>Suas contas</h2>
-                  <p className="muted">Saldo atual por conta</p>
-                </div>
-                <button
-                  className="text-button"
-                  onClick={() => setPage("accounts")}
-                >
-                  Gerenciar
-                </button>
-              </div>
-              <AccountList
-                accounts={accounts}
-                balances={accountBalances}
-                onDelete={deleteAccount}
-              />
-            </section>
-          </>
+          <DashboardPage
+            accounts={accounts}
+            transactions={transactions}
+            accountBalances={accountBalances}
+            totalBalance={totalBalance}
+            income={income}
+            expenses={expenses}
+            onNavigate={setPage}
+            onEditTransaction={(transaction) => {
+              setEditing(transaction);
+              setModal("transaction");
+            }}
+            onDeleteTransaction={deleteTransaction}
+          />
         )}
-
-        {page === "transactions" && (
-          <section className="panel">
-            <div className="filters">
-              <label className="search-box">
-                <Search size={17} />
-                <input
-                  placeholder="Buscar transação..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
-              <select
-                value={typeFilter}
-                onChange={(event) => {
-                  const value = event.target.value;
-
-                  if (
-                    value === "all" ||
-                    value === "income" ||
-                    value === "expense"
-                  ) {
-                    setTypeFilter(value);
-                  }
-                }}
-                aria-label="Filtrar por tipo"
-              >
-                <option value="all">Todos os tipos</option>
-                <option value="income">Receitas</option>
-                <option value="expense">Despesas</option>
-              </select>
-              <input
-                aria-label="Filtrar por mês"
-                type="month"
-                value={monthFilter}
-                onChange={(event) => setMonthFilter(event.target.value)}
-              />
-              <button
-                className="button-secondary"
-                onClick={() => {
-                  setSearch("");
-                  setTypeFilter("all");
-                  setMonthFilter("");
-                }}
-              >
-                Limpar filtros
-              </button>
-            </div>
-            <p className="muted result-count">
-              {filteredTransactions.length} resultado(s)
-            </p>
-            <TransactionList
-              transactions={filteredTransactions}
-              accounts={accounts}
-              onEdit={(transaction) => {
-                setEditing(transaction);
-                setModal("transaction");
-              }}
-              onDelete={deleteTransaction}
-            />
-          </section>
-        )}
-
-        {page === "accounts" && (
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Contas e carteiras</h2>
-                <p className="muted">
-                  Gerencie onde seu dinheiro está registrado
-                </p>
-              </div>
-              <button
-                className="button-primary"
-                onClick={() => setModal("account")}
-              >
-                <Plus size={16} /> Nova conta
-              </button>
-            </div>
-            <AccountList
-              accounts={accounts}
-              balances={accountBalances}
-              onDelete={deleteAccount}
-            />
-          </section>
-        )}
-
-        <footer className="footer">
-          <span>Milky Bills</span>
-          <span>Seus dados ficam neste dispositivo.</span>
-        </footer>
-      </section>
-
-      {modal && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setModal(null);
-            setEditing(null);
-          }}
-        >
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-heading">
-              <div>
-                <p className="eyebrow">MILKY / BILLS</p>
-                <h2 id="modal-title">
-                  {modal === "account"
-                    ? "Nova conta"
-                    : editing
-                      ? "Editar transação"
-                      : "Nova transação"}
-                </h2>
-              </div>
-              <button
-                className="icon-button"
-                aria-label="Fechar"
-                onClick={() => {
-                  setModal(null);
-                  setEditing(null);
-                }}
-              >
-                <X />
-              </button>
-            </div>
-
-            {modal === "account" ? (
-              <form
-                className="form"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  try {
-                    await saveAccount(event.currentTarget);
-                  } catch (error) {
-                    setNotice(
-                      error instanceof Error
-                        ? error.message
-                        : "Erro ao salvar.",
-                    );
-                  }
-                }}
-              >
-                <label>
-                  Nome da conta
-                  <input
-                    name="name"
-                    placeholder="Ex.: Conta principal"
-                    required
-                  />
-                </label>
-
-                <label>
-                  Tipo
-                  <select name="type" defaultValue="checking">
-                    <option value="checking">Conta corrente</option>
-                    <option value="savings">Poupança</option>
-                    <option value="cash">Dinheiro</option>
-                    <option value="credit">Cartão de crédito</option>
-                  </select>
-                </label>
-
-                <label>
-                  Saldo inicial (R$)
-                  <input
-                    name="initialBalance"
-                    inputMode="decimal"
-                    defaultValue="0"
-                    required
-                  />
-                </label>
-
-                <button className="button-primary full-width" type="submit">
-                  Salvar conta
-                </button>
-              </form>
-            ) : (
-              <form
-                className="form"
-                key={editing?.id ?? "new"}
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  try {
-                    await saveTransaction(event.currentTarget);
-                  } catch (error) {
-                    setNotice(
-                      error instanceof Error
-                        ? error.message
-                        : "Erro ao salvar.",
-                    );
-                  }
-                }}
-              >
-                <label>
-                  Descrição
-                  <input
-                    name="description"
-                    placeholder="Ex.: Mercado"
-                    defaultValue={editing?.description ?? ""}
-                    required
-                  />
-                </label>
-
-                <label>
-                  Tipo
-                  <select name="type" defaultValue={editing?.type ?? "expense"}>
-                    <option value="expense">Despesa</option>
-                    <option value="income">Receita</option>
-                  </select>
-                </label>
-
-                <label>
-                  Valor (R$)
-                  <input
-                    name="amount"
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    defaultValue={
-                      editing
-                        ? (editing.amount / 100).toFixed(2).replace(".", ",")
-                        : ""
-                    }
-                    required
-                  />
-                </label>
-
-                <label>
-                  Conta
-                  <select
-                    name="accountId"
-                    defaultValue={editing?.accountId ?? accounts[0]?.id ?? ""}
-                    required
-                  >
-                    {accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                  {accounts.length === 0 && (
-                    <small>
-                      Cadastre uma conta antes de lançar transações.
-                    </small>
-                  )}
-                </label>
-
-                <label>
-                  Categoria
-                  <select
-                    name="category"
-                    defaultValue={editing?.category ?? "Outros"}
-                  >
-                    {categories.map((category) => (
-                      <option key={category}>{category}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  Data
-                  <input
-                    name="date"
-                    type="date"
-                    defaultValue={editing?.date ?? today()}
-                    required
-                  />
-                </label>
-
-                <button
-                  className="button-primary full-width"
-                  type="submit"
-                  disabled={accounts.length === 0}
-                >
-                  {editing ? "Salvar alterações" : "Adicionar transação"}
-                </button>
-              </form>
-            )}
-          </section>
-        </div>
-      )}
-    </main>
-  );
-}
-
-function NavItem({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button className={`nav-item ${active ? "active" : ""}`} onClick={onClick}>
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-  kind,
-}: {
-  label: string;
-  value: string;
-  icon: ReactNode;
-  kind: "income" | "expense";
-}) {
-  return (
-    <article className="stat-card">
-      <div className={`stat-icon ${kind}`}>{icon}</div>
-      <p className="muted">{label}</p>
-      <strong>{value}</strong>
-      <span className="stat-caption">Mês atual</span>
-    </article>
-  );
-}
-
-function TransactionList({
-  transactions,
-  accounts,
-  onEdit,
-  onDelete,
-}: {
-  transactions: Transaction[];
-  accounts: Account[];
-  onEdit: (transaction: Transaction) => void;
-  onDelete: (transaction: Transaction) => void;
-}) {
-  if (transactions.length === 0) {
-    return (
-      <div className="empty-state">
-        <Activity size={28} />
-        <strong>Nenhuma transação por aqui</strong>
-        <span>Adicione uma receita ou despesa para começar.</span>
       </div>
-    );
-  }
-
-  return (
-    <div className="transaction-list">
-      {transactions.map((transaction) => {
-        const account = accounts.find(
-          (item) => item.id === transaction.accountId,
-        );
-        const isIncome = transaction.type === "income";
-
-        return (
-          <article className="transaction-row" key={transaction.id}>
-            <div
-              className={`transaction-icon ${isIncome ? "income" : "expense"}`}
-            >
-              {isIncome ? (
-                <ArrowDownLeft size={19} />
-              ) : (
-                <ArrowUpRight size={19} />
-              )}
-            </div>
-
-            <div className="transaction-info">
-              <strong>{transaction.description}</strong>
-              <span>
-                {transaction.category} · {account?.name ?? "Conta removida"}
-              </span>
-              <small>
-                {new Date(`${transaction.date}T12:00:00`).toLocaleDateString(
-                  "pt-BR",
-                )}
-              </small>
-            </div>
-
-            <div className="transaction-end">
-              <strong className={isIncome ? "positive" : "negative"}>
-                {isIncome ? "+" : "−"}
-                {formatMoney(transaction.amount)}
-              </strong>
-              <div className="row-actions">
-                <button
-                  className="text-button"
-                  onClick={() => onEdit(transaction)}
-                  aria-label={`Editar ${transaction.description}`}
-                >
-                  Editar
-                </button>
-                <button
-                  className="icon-button danger"
-                  onClick={() => onDelete(transaction)}
-                  aria-label={`Excluir ${transaction.description}`}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </div>
-          </article>
-        );
-      })}
-    </div>
+    </AppLayout>
   );
 }
 
-function AccountList({
-  accounts,
-  balances,
-  onDelete,
-}: {
-  accounts: Account[];
-  balances: Map<number, number>;
-  onDelete: (account: Account) => void;
-}) {
-  if (accounts.length === 0) {
-    return (
-      <div className="empty-state">
-        <Wallet size={28} />
-        <strong>Você ainda não tem contas</strong>
-        <span>Crie uma conta para começar a registrar seus gastos.</span>
-      </div>
-    );
-  }
-
-  const accountLabels: Record<string, string> = {
-    checking: "Conta corrente",
-    savings: "Poupança",
-    cash: "Dinheiro",
-    credit: "Cartão de crédito",
-  };
-
-  return (
-    <div className="account-list">
-      {accounts.map((account) => (
-        <article className="account-row" key={account.id}>
-          <div className="account-symbol">
-            <Wallet size={19} />
-          </div>
-          <div className="account-info">
-            <strong>{account.name}</strong>
-            <span>{accountLabels[account.type] ?? account.type}</span>
-          </div>
-          <div className="account-end">
-            <strong>{formatMoney(balances.get(account.id!) ?? 0)}</strong>
-            <button
-              className="icon-button danger"
-              onClick={() => onDelete(account)}
-              aria-label={`Excluir conta ${account.name}`}
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
+export default App;
