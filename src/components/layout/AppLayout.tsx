@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Footer } from "./Footer";
-import { Sidebar, type AppPage } from "./Sidebar/Sidebar";
+import { Sidebar } from "./Sidebar/Sidebar";
 import { Topbar } from "./Topbar";
 import {
   AppShell,
@@ -8,6 +8,7 @@ import {
   MobileOverlay,
   PageContent,
 } from "./AppLayout.styles";
+import type { AppPage } from "./Sidebar/interfaces/Sidebar.interface";
 
 interface AppLayoutProps {
   page: AppPage;
