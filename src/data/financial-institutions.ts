@@ -1,0 +1,178 @@
+import {
+  BancoDoBrasil,
+  Bradesco,
+  BTGPactual,
+  C6Bank,
+  Caixa,
+  Inter,
+  Itau,
+  MercadoPago,
+  Nubank,
+  Outros,
+  PagBank,
+  Pan,
+  PicPay,
+  Santander,
+  Sicoob,
+  Sicredi,
+  XP,
+  type BankIconComponent,
+} from "react-bancos";
+
+export interface FinancialInstitution {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  initials: string;
+  logo: BankIconComponent;
+}
+
+export const FINANCIAL_INSTITUTIONS: FinancialInstitution[] = [
+  {
+    id: "nubank",
+    name: "Nubank",
+    shortName: "Nubank",
+    color: "#820AD1",
+    initials: "Nu",
+    logo: Nubank,
+  },
+  {
+    id: "itau",
+    name: "Itaú",
+    shortName: "Itaú",
+    color: "#EC7000",
+    initials: "Itaú",
+    logo: Itau,
+  },
+  {
+    id: "banco-do-brasil",
+    name: "Banco do Brasil",
+    shortName: "Banco do Brasil",
+    color: "#F8D117",
+    initials: "BB",
+    logo: BancoDoBrasil,
+  },
+  {
+    id: "bradesco",
+    name: "Bradesco",
+    shortName: "Bradesco",
+    color: "#CC092F",
+    initials: "B",
+    logo: Bradesco,
+  },
+  {
+    id: "santander",
+    name: "Santander",
+    shortName: "Santander",
+    color: "#EC0000",
+    initials: "S",
+    logo: Santander,
+  },
+  {
+    id: "caixa",
+    name: "Caixa Econômica Federal",
+    shortName: "Caixa",
+    color: "#0066B3",
+    initials: "C",
+    logo: Caixa,
+  },
+  {
+    id: "inter",
+    name: "Inter",
+    shortName: "Inter",
+    color: "#FF7A00",
+    initials: "Inter",
+    logo: Inter,
+  },
+  {
+    id: "c6-bank",
+    name: "C6 Bank",
+    shortName: "C6 Bank",
+    color: "#242424",
+    initials: "C6",
+    logo: C6Bank,
+  },
+  {
+    id: "btg-pactual",
+    name: "BTG Pactual",
+    shortName: "BTG Pactual",
+    color: "#142D4E",
+    initials: "BTG",
+    logo: BTGPactual,
+  },
+  {
+    id: "mercado-pago",
+    name: "Mercado Pago",
+    shortName: "Mercado Pago",
+    color: "#009EE3",
+    initials: "MP",
+    logo: MercadoPago,
+  },
+  {
+    id: "picpay",
+    name: "PicPay",
+    shortName: "PicPay",
+    color: "#21C25E",
+    initials: "P",
+    logo: PicPay,
+  },
+  {
+    id: "pagbank",
+    name: "PagBank",
+    shortName: "PagBank",
+    color: "#00A868",
+    initials: "PB",
+    logo: PagBank,
+  },
+  {
+    id: "sicredi",
+    name: "Sicredi",
+    shortName: "Sicredi",
+    color: "#3FAE29",
+    initials: "Si",
+    logo: Sicredi,
+  },
+  {
+    id: "sicoob",
+    name: "Sicoob",
+    shortName: "Sicoob",
+    color: "#003641",
+    initials: "Sc",
+    logo: Sicoob,
+  },
+  {
+    id: "banco-pan",
+    name: "Banco PAN",
+    shortName: "Banco PAN",
+    color: "#00AEEF",
+    initials: "PAN",
+    logo: Pan,
+  },
+  {
+    id: "xp",
+    name: "XP",
+    shortName: "XP",
+    color: "#000000",
+    initials: "XP",
+    logo: XP,
+  },
+  {
+    id: "other",
+    name: "Outro banco ou instituição",
+    shortName: "Outra instituição",
+    color: "#777777",
+    initials: "OF",
+    logo: Outros,
+  },
+];
+
+export const ACCOUNT_TYPES = [
+  { value: "checking", label: "Conta corrente" },
+  { value: "savings", label: "Conta poupança" },
+  { value: "salary", label: "Conta salário" },
+  { value: "payment", label: "Conta de pagamento" },
+  { value: "investment", label: "Conta de investimentos" },
+  { value: "cash", label: "Dinheiro em espécie" },
+  { value: "credit", label: "Conta de crédito" },
+] as const;

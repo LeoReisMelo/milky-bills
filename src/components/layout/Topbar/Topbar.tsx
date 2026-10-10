@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-
 import {
   Bell,
   Check,
@@ -10,7 +9,6 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-
 import {
   ActionAnchor,
   AvatarButton,
@@ -121,7 +119,7 @@ export function Topbar({
   return (
     <Header>
       <HeaderStart>
-        <PageTitle>Your financial workspace</PageTitle>
+        <PageTitle>Seu espaço de trabalho financeiro</PageTitle>
       </HeaderStart>
 
       <HeaderActions ref={containerRef}>

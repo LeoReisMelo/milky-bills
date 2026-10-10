@@ -4,6 +4,7 @@ import {
   DEFAULT_CATEGORIES,
   type Account,
   type Category,
+  type CategoryType,
   type Transaction,
   type TransactionType,
 } from "./db/database";
@@ -18,6 +19,12 @@ import { downloadBackup } from "./lib/backup";
 import { AppLayout } from "./components/layout/AppLayout";
 import type { Page, Theme } from "./types/app";
 import { DashboardPage } from "./pages/DashboardPage";
+import { CategoriesPage } from "./pages/Categories/CategoriesPage";
+import {
+  AccountsPage,
+  type AccountFormData,
+} from "./pages/Accounts/AccountsPage";
+import { TransactionsPage } from "./pages/Transactions/TransactionsPage";
 
 type DashboardPeriod = "this-month" | "last-month" | "last-3-months" | "custom";
 
@@ -141,16 +148,98 @@ function App() {
   async function refresh() {
     let storedCategories = await db.categories.toArray();
 
+    const defaultCategories = [
+      {
+        name: "Moradia",
+        description: "Aluguel, contas e despesas da casa.",
+        type: "expense",
+        icon: "house",
+      },
+      {
+        name: "Alimentação",
+        description: "Mercado, restaurantes e refeições.",
+        type: "expense",
+        icon: "utensils",
+      },
+      {
+        name: "Transporte",
+        description: "Combustível, transporte público e viagens.",
+        type: "expense",
+        icon: "bus",
+      },
+      {
+        name: "Saúde",
+        description: "Consultas, exames e medicamentos.",
+        type: "expense",
+        icon: "heart-pulse",
+      },
+      {
+        name: "Lazer",
+        description: "Entretenimento e atividades de lazer.",
+        type: "expense",
+        icon: "clapperboard",
+      },
+      {
+        name: "Educação",
+        description: "Cursos, livros e materiais de estudo.",
+        type: "expense",
+        icon: "graduation-cap",
+      },
+      {
+        name: "Salário",
+        description: "Salário e remuneração profissional.",
+        type: "income",
+        icon: "briefcase-business",
+      },
+      {
+        name: "Investimentos",
+        description: "Rendimentos e receitas de investimentos.",
+        type: "income",
+        icon: "trending-up",
+      },
+      {
+        name: "Outros",
+        description: "Outras movimentações financeiras.",
+        type: "expense",
+        icon: "circle-dollar-sign",
+      },
+    ] satisfies Omit<Category, "id" | "createdAt">[];
+
     if (storedCategories.length === 0) {
+      const createdAt = new Date().toISOString();
+
       await db.categories.bulkAdd(
-        DEFAULT_CATEGORIES.map((name) => ({
-          name,
-          createdAt: new Date().toISOString(),
+        defaultCategories.map((category) => ({
+          ...category,
+          createdAt,
         })),
       );
+    } else {
+      // Corrige os ícones antigos sem sobrescrever escolhas personalizadas.
+      await db.transaction("rw", db.categories, async () => {
+        for (const defaultCategory of defaultCategories) {
+          const existing = storedCategories.find(
+            (category) =>
+              category.name
+                .trim()
+                .normalize("NFKC")
+                .toLocaleLowerCase("pt-BR") ===
+              defaultCategory.name.normalize("NFKC").toLocaleLowerCase("pt-BR"),
+          );
 
-      storedCategories = await db.categories.toArray();
+          if (
+            existing?.id !== undefined &&
+            (!existing.icon || existing.icon === "circle-dollar-sign")
+          ) {
+            await db.categories.update(existing.id, {
+              icon: defaultCategory.icon,
+            });
+          }
+        }
+      });
     }
+
+    storedCategories = await db.categories.toArray();
 
     const [storedAccounts, storedTransactions] = await Promise.all([
       db.accounts.toArray(),
@@ -360,6 +449,101 @@ function App() {
     setModal(null);
     setEditing(null);
     setTransactionType("expense");
+  }
+
+  async function createAccount(data: AccountFormData) {
+    await db.accounts.add({
+      ...data,
+      createdAt: new Date().toISOString(),
+    });
+
+    await refresh();
+    setNotice("Conta criada com sucesso.");
+  }
+
+  async function updateAccount(id: number, data: AccountFormData) {
+    await db.accounts.update(id, data);
+
+    await refresh();
+    setNotice("Conta atualizada com sucesso.");
+  }
+
+  async function createTransaction(data: {
+    title: string;
+    description: string;
+    amount: number;
+    type: TransactionType;
+    category: string;
+    accountId: number;
+    date: string;
+  }) {
+    await db.transactions.add({
+      ...data,
+      createdAt: new Date().toISOString(),
+    });
+
+    await refresh();
+    setNotice("Transação criada com sucesso.");
+  }
+
+  async function editTransaction(
+    transactionId: number,
+    data: {
+      description: string;
+      amount: number;
+      type: TransactionType;
+      category: string;
+      accountId: number;
+      date: string;
+    },
+  ) {
+    await db.transactions.update(transactionId, data);
+
+    await refresh();
+    setNotice("Transação atualizada com sucesso.");
+  }
+
+  async function createCategory(data: {
+    name: string;
+    description: string;
+    type: CategoryType;
+    icon: string;
+  }) {
+    await db.categories.add({
+      ...data,
+      createdAt: new Date().toISOString(),
+    });
+
+    await refresh();
+    setNotice("Categoria criada com sucesso.");
+  }
+
+  async function renameCategory(
+    category: Category,
+    data: {
+      name: string;
+      description: string;
+      type: CategoryType;
+      icon: string;
+    },
+  ) {
+    if (category.id === undefined) {
+      throw new Error("Categoria sem identificador.");
+    }
+
+    await db.transaction("rw", db.categories, db.transactions, async () => {
+      await db.categories.update(category.id!, data);
+
+      if (category.name !== data.name) {
+        await db.transactions
+          .where("category")
+          .equals(category.name)
+          .modify({ category: data.name });
+      }
+    });
+
+    await refresh();
+    setNotice("Categoria atualizada com sucesso.");
   }
 
   async function saveAccount(event: FormEvent<HTMLFormElement>) {
@@ -609,9 +793,37 @@ function App() {
             expenses={expenses}
             onNavigate={setPage}
             onNewTransaction={openNewTransaction}
-            onNewAccount={() => setModal("account")}
+            onNewAccount={() => setPage("accounts")}
             onEditTransaction={openEditTransaction}
             onDeleteTransaction={deleteTransaction}
+          />
+        )}
+        {page === "categories" && (
+          <CategoriesPage
+            categories={categories}
+            transactions={transactions}
+            onCreate={createCategory}
+            onRename={renameCategory}
+            onDelete={deleteCategory}
+          />
+        )}
+        {page === "accounts" && (
+          <AccountsPage
+            accounts={accounts}
+            balances={Object.fromEntries(accountBalances)}
+            onCreate={createAccount}
+            onUpdate={updateAccount}
+            onDelete={deleteAccount}
+          />
+        )}
+        {page === "transactions" && (
+          <TransactionsPage
+            transactions={transactions}
+            accounts={accounts}
+            categories={categories}
+            onCreate={createTransaction}
+            onUpdate={editTransaction}
+            onDelete={deleteTransaction}
           />
         )}
       </div>

@@ -1,4 +1,3 @@
-
 import { describe, expect, it } from "vitest";
 
 import type { Account, Transaction } from "../db/database";
@@ -15,6 +14,7 @@ import {
 const checkingAccount: Account = {
   id: 1,
   name: "Conta principal",
+  institutionId: "1",
   type: "checking",
   initialBalance: 100_000,
   createdAt: "2026-10-01T10:00:00.000Z",
@@ -22,6 +22,7 @@ const checkingAccount: Account = {
 
 const savingsAccount: Account = {
   id: 2,
+  institutionId: "1",
   name: "Poupança",
   type: "savings",
   initialBalance: 50_000,
@@ -38,6 +39,7 @@ function makeTransaction(
     category: "Outros",
     date: "2026-10-05",
     createdAt: "2026-10-05T12:00:00.000Z",
+    title: "",
     ...overrides,
   };
 }
@@ -174,10 +176,7 @@ describe("getMonthlySummary", () => {
 
   it("mantém o resultado independente da ordem dos lançamentos", () => {
     const original = getMonthlySummary(transactions, "2026-10");
-    const reversed = getMonthlySummary(
-      [...transactions].reverse(),
-      "2026-10",
-    );
+    const reversed = getMonthlySummary([...transactions].reverse(), "2026-10");
 
     expect(reversed).toEqual(original);
   });
@@ -200,10 +199,7 @@ describe("calculateAccountBalances", () => {
       }),
     ];
 
-    const balances = calculateAccountBalances(
-      [checkingAccount],
-      transactions,
-    );
+    const balances = calculateAccountBalances([checkingAccount], transactions);
 
     expect(balances.get(1)).toBe(115_000);
   });

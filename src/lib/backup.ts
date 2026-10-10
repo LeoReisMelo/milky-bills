@@ -1,4 +1,3 @@
-
 import {
   db,
   DEFAULT_CATEGORIES,
@@ -19,22 +18,12 @@ export interface MilkyBillsBackup {
   categories: Category[];
 }
 
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isPositiveId(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value > 0
-  );
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 function isValidTimestamp(value: unknown): value is string {
@@ -78,9 +67,7 @@ function isAccount(value: unknown): value is Account {
     isPositiveId(value.id) &&
     typeof value.name === "string" &&
     value.name.trim().length > 0 &&
-    ["checking", "savings", "cash", "credit"].includes(
-      String(value.type),
-    ) &&
+    ["checking", "savings", "cash", "credit"].includes(String(value.type)) &&
     typeof value.initialBalance === "number" &&
     Number.isSafeInteger(value.initialBalance) &&
     isValidTimestamp(value.createdAt)
@@ -92,11 +79,9 @@ function isTransaction(value: unknown): value is Transaction {
     return false;
   }
 
-  const supportedType = [
-    "income",
-    "expense",
-    "transfer",
-  ].includes(String(value.type));
+  const supportedType = ["income", "expense", "transfer"].includes(
+    String(value.type),
+  );
 
   const validDestination =
     value.type === "transfer"
@@ -166,7 +151,10 @@ function categoriesFromLegacyBackup(
 
   return [...names.values()].map((name) => ({
     name,
-    createdAt: exportedAt,
+    description: "",
+    type: "expense",
+    icon: "circle-dollar-sign",
+    createdAt: new Date().toISOString(),
   }));
 }
 
@@ -198,9 +186,7 @@ export async function downloadBackup(): Promise<void> {
   const link = document.createElement("a");
 
   link.href = url;
-  link.download = `milky-bills-${new Date()
-    .toISOString()
-    .slice(0, 10)}.json`;
+  link.download = `milky-bills-${new Date().toISOString().slice(0, 10)}.json`;
 
   document.body.appendChild(link);
   link.click();
@@ -246,12 +232,8 @@ export async function restoreBackup(file: File): Promise<void> {
 
   const categories: Category[] =
     data.version === 1
-      ? categoriesFromLegacyBackup(
-          transactions,
-          data.exportedAt,
-        )
-      : Array.isArray(data.categories) &&
-          data.categories.every(isCategory)
+      ? categoriesFromLegacyBackup(transactions, data.exportedAt)
+      : Array.isArray(data.categories) && data.categories.every(isCategory)
         ? (data.categories as Category[])
         : (() => {
             throw new Error(
@@ -259,9 +241,7 @@ export async function restoreBackup(file: File): Promise<void> {
             );
           })();
 
-  const accountIds = new Set(
-    accounts.map((account) => account.id),
-  );
+  const accountIds = new Set(accounts.map((account) => account.id));
 
   if (accountIds.size !== accounts.length) {
     throw new Error("O backup contém IDs de contas duplicados.");
@@ -272,19 +252,13 @@ export async function restoreBackup(file: File): Promise<void> {
   );
 
   if (transactionIds.size !== transactions.length) {
-    throw new Error(
-      "O backup contém IDs de transações duplicados.",
-    );
+    throw new Error("O backup contém IDs de transações duplicados.");
   }
 
-  const categoryIds = new Set(
-    categories.map((category) => category.id),
-  );
+  const categoryIds = new Set(categories.map((category) => category.id));
 
   if (categoryIds.size !== categories.length) {
-    throw new Error(
-      "O backup contém IDs de categorias duplicados.",
-    );
+    throw new Error("O backup contém IDs de categorias duplicados.");
   }
 
   const categoryNames = new Set<string>();
@@ -293,9 +267,7 @@ export async function restoreBackup(file: File): Promise<void> {
     const normalized = normalizeName(category.name);
 
     if (categoryNames.has(normalized)) {
-      throw new Error(
-        "O backup contém categorias com nomes duplicados.",
-      );
+      throw new Error("O backup contém categorias com nomes duplicados.");
     }
 
     categoryNames.add(normalized);

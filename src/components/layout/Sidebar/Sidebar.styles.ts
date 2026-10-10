@@ -68,7 +68,7 @@ export const BrandLogo = styled.img`
 `;
 
 export const BrandName = styled.span`
-  font-family: "Fredoka", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 21px;
   font-weight: 500;
   letter-spacing: -0.6px;
@@ -85,7 +85,7 @@ export const SidebarSectionLabel = styled.p`
   padding: 0 10px;
 
   color: var(--color-text-secondary);
-  font-family: "Fredoka", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 1.1px;
@@ -121,7 +121,7 @@ export const NavigationItem = styled.button<{ $active: boolean }>`
   color: ${({ $active }) =>
     $active ? "var(--color-primary)" : "var(--color-text-secondary)"};
 
-  font-family: "Fredoka", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
   font-size: 13px;
   font-weight: ${({ $active }) => ($active ? 600 : 400)};
   text-align: left;

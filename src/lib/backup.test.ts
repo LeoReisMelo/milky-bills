@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -8,11 +7,7 @@ import {
   type Transaction,
 } from "../db/database";
 
-import {
-  createBackup,
-  restoreBackup,
-  type MilkyBillsBackup,
-} from "./backup";
+import { createBackup, restoreBackup, type MilkyBillsBackup } from "./backup";
 
 const account: Account = {
   id: 1,
@@ -20,6 +15,7 @@ const account: Account = {
   type: "checking",
   initialBalance: 100_000,
   createdAt: "2026-10-01T10:00:00.000Z",
+  institutionId: "",
 };
 
 const savingsAccount: Account = {
@@ -28,6 +24,7 @@ const savingsAccount: Account = {
   type: "savings",
   initialBalance: 50_000,
   createdAt: "2026-10-01T10:00:00.000Z",
+  institutionId: "",
 };
 
 const transaction: Transaction = {
@@ -39,6 +36,7 @@ const transaction: Transaction = {
   amount: 5_000,
   date: "2026-10-05",
   createdAt: "2026-10-05T12:00:00.000Z",
+  title: "",
 };
 
 const transfer: Transaction = {
@@ -51,26 +49,31 @@ const transfer: Transaction = {
   amount: 20_000,
   date: "2026-10-06",
   createdAt: "2026-10-06T12:00:00.000Z",
+  title: "",
 };
 
 const category: Category = {
   id: 1,
   name: "Alimentação",
   createdAt: "2026-10-01T10:00:00.000Z",
+  description: "",
+  icon: "",
+  type: "income",
 };
 
 const customCategory: Category = {
   id: 2,
   name: "Pets",
   createdAt: "2026-10-02T10:00:00.000Z",
+  description: "",
+  icon: "",
+  type: "income",
 };
 
 function createFile(content: unknown): File {
-  return new File(
-    [JSON.stringify(content)],
-    "milky-bills-backup.json",
-    { type: "application/json" },
-  );
+  return new File([JSON.stringify(content)], "milky-bills-backup.json", {
+    type: "application/json",
+  });
 }
 
 function createValidBackup(
@@ -156,6 +159,9 @@ describe("Milky Bills — backup", () => {
       id: 3,
       name: "Categoria antiga",
       createdAt: "2026-10-03T10:00:00.000Z",
+      description: "",
+      icon: "",
+      type: "income",
     });
 
     await restoreBackup(createFile(createValidBackup()));
@@ -186,15 +192,12 @@ describe("Milky Bills — backup", () => {
     expect(await db.categories.toArray()).toHaveLength(2);
   });
 
-
   it("rejeita um arquivo que não contém JSON válido", async () => {
     await seedDatabase();
 
-    const file = new File(
-      ["isto não é JSON"],
-      "backup.json",
-      { type: "application/json" },
-    );
+    const file = new File(["isto não é JSON"], "backup.json", {
+      type: "application/json",
+    });
 
     await expect(restoreBackup(file)).rejects.toThrow(
       "O arquivo não contém um JSON válido.",
@@ -230,9 +233,7 @@ describe("Milky Bills — backup", () => {
           exportedAt: "data inválida",
         }),
       ),
-    ).rejects.toThrow(
-      "A data de exportação do backup é inválida.",
-    );
+    ).rejects.toThrow("A data de exportação do backup é inválida.");
 
     await expectOriginalDataToRemain();
   });
@@ -260,9 +261,7 @@ describe("Milky Bills — backup", () => {
       restoreBackup(
         createFile(
           createValidBackup({
-            transactions: [
-              { ...transaction, date: "2026-02-31" },
-            ],
+            transactions: [{ ...transaction, date: "2026-02-31" }],
           }),
         ),
       ),
@@ -278,17 +277,12 @@ describe("Milky Bills — backup", () => {
       restoreBackup(
         createFile(
           createValidBackup({
-            accounts: [
-              account,
-              { ...account, name: "Outra conta" },
-            ],
+            accounts: [account, { ...account, name: "Outra conta" }],
             transactions: [],
           }),
         ),
       ),
-    ).rejects.toThrow(
-      "O backup contém IDs de contas duplicados.",
-    );
+    ).rejects.toThrow("O backup contém IDs de contas duplicados.");
 
     await expectOriginalDataToRemain();
   });
@@ -310,9 +304,7 @@ describe("Milky Bills — backup", () => {
           }),
         ),
       ),
-    ).rejects.toThrow(
-      "O backup contém IDs de transações duplicados.",
-    );
+    ).rejects.toThrow("O backup contém IDs de transações duplicados.");
 
     await expectOriginalDataToRemain();
   });
@@ -335,9 +327,7 @@ describe("Milky Bills — backup", () => {
           }),
         ),
       ),
-    ).rejects.toThrow(
-      "O backup contém IDs de categorias duplicados.",
-    );
+    ).rejects.toThrow("O backup contém IDs de categorias duplicados.");
 
     await expectOriginalDataToRemain();
   });
@@ -359,9 +349,7 @@ describe("Milky Bills — backup", () => {
           }),
         ),
       ),
-    ).rejects.toThrow(
-      "O backup contém categorias com nomes duplicados.",
-    );
+    ).rejects.toThrow("O backup contém categorias com nomes duplicados.");
 
     await expectOriginalDataToRemain();
   });
@@ -381,9 +369,7 @@ describe("Milky Bills — backup", () => {
           ],
         }),
       ),
-    ).rejects.toThrow(
-      "O backup contém categorias inválidas ou ausentes.",
-    );
+    ).rejects.toThrow("O backup contém categorias inválidas ou ausentes.");
 
     await expectOriginalDataToRemain();
   });
@@ -395,9 +381,7 @@ describe("Milky Bills — backup", () => {
       restoreBackup(
         createFile(
           createValidBackup({
-            transactions: [
-              { ...transaction, accountId: 999 },
-            ],
+            transactions: [{ ...transaction, accountId: 999 }],
           }),
         ),
       ),
@@ -447,9 +431,7 @@ describe("Milky Bills — backup", () => {
           }),
         ),
       ),
-    ).rejects.toThrow(
-      "O backup contém registros inválidos.",
-    );
+    ).rejects.toThrow("O backup contém registros inválidos.");
 
     await expectOriginalDataToRemain();
   });
@@ -461,15 +443,11 @@ describe("Milky Bills — backup", () => {
       restoreBackup(
         createFile(
           createValidBackup({
-            transactions: [
-              { ...transaction, amount: 10.5 },
-            ],
+            transactions: [{ ...transaction, amount: 10.5 }],
           }),
         ),
       ),
-    ).rejects.toThrow(
-      "O backup contém registros inválidos.",
-    );
+    ).rejects.toThrow("O backup contém registros inválidos.");
 
     await expectOriginalDataToRemain();
   });
