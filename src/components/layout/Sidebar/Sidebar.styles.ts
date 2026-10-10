@@ -62,8 +62,8 @@ export const SidebarBrand = styled.button`
 export const BrandLogo = styled.img`
   display: block;
   flex: 0 0 34px;
-  width: 64px;
-  height: 64px;
+  width: 90px;
+  height: 90px;
   object-fit: contain;
 `;
 

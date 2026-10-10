@@ -1,4 +1,3 @@
-
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -9,9 +8,6 @@ import {
   ChartNoAxesCombined,
   Settings,
 } from "lucide-react";
-
-import logo from "../../assets/milky-bills-logo.png";
-
 import {
   SidebarContainer,
   SidebarBrand,
@@ -24,38 +20,20 @@ import {
   MobileBottomBar,
   MobileNavigationItem,
 } from "./Sidebar.styles";
-
-export type AppPage =
-  | "dashboard"
-  | "transactions"
-  | "accounts"
-  | "cards"
-  | "recurring"
-  | "categories"
-  | "reports"
-  | "settings";
-
-interface SidebarProps {
-  page: AppPage;
-  onNavigate: (page: AppPage) => void;
-  open?: boolean;
-}
+import logo from "../../../assets/milky-bills-logo.png";
+import type { SidebarProps } from "./interfaces/Sidebar.interface";
 
 const navigationItems = [
   { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { id: "transactions", label: "Transactions", Icon: ArrowLeftRight },
-  { id: "accounts", label: "Accounts", Icon: Wallet },
-  { id: "cards", label: "Cards", Icon: CreditCard },
-  { id: "recurring", label: "Recurring", Icon: Repeat },
-  { id: "categories", label: "Categories", Icon: Tags },
-  { id: "reports", label: "Reports", Icon: ChartNoAxesCombined },
+  { id: "transactions", label: "Transações", Icon: ArrowLeftRight },
+  { id: "accounts", label: "Contas", Icon: Wallet },
+  { id: "cards", label: "Cartões", Icon: CreditCard },
+  { id: "recurring", label: "Recorrência", Icon: Repeat },
+  { id: "categories", label: "Categorias", Icon: Tags },
+  { id: "reports", label: "Relatórios", Icon: ChartNoAxesCombined },
 ] as const;
 
-export function Sidebar({
-  page,
-  onNavigate,
-  open = false,
-}: SidebarProps) {
+export function Sidebar({ page, onNavigate, open = false }: SidebarProps) {
   return (
     <>
       <SidebarContainer data-open={open}>
@@ -66,13 +44,11 @@ export function Sidebar({
         >
           <BrandLogo src={logo} alt="" />
           <BrandName>
-            milky <strong>bills</strong>
+            Milky <strong>Bills</strong>
           </BrandName>
         </SidebarBrand>
 
-        <SidebarSectionLabel>
-          FINANÇAS PESSOAIS
-        </SidebarSectionLabel>
+        <SidebarSectionLabel>FINANÇAS PESSOAIS</SidebarSectionLabel>
 
         <SidebarNavigation aria-label="Navegação principal">
           {navigationItems.map(({ id, label, Icon }) => (
@@ -97,7 +73,7 @@ export function Sidebar({
             onClick={() => onNavigate("settings")}
           >
             <Settings size={18} strokeWidth={1.8} />
-            <span>Settings</span>
+            <span>Configurações</span>
           </NavigationItem>
         </SidebarBottom>
       </SidebarContainer>
@@ -127,7 +103,7 @@ export function Sidebar({
           title="Settings"
         >
           <Settings size={20} strokeWidth={1.8} />
-          <span>Settings</span>
+          <span>Configurações</span>
         </MobileNavigationItem>
       </MobileBottomBar>
     </>

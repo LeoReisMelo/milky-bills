@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Footer } from "./Footer";
-import { Sidebar, type AppPage } from "./Sidebar";
+import { Sidebar, type AppPage } from "./Sidebar/Sidebar";
 import { Topbar } from "./Topbar";
 import {
   AppShell,
