@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import * as LucideIcons from "lucide-react";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -13,8 +14,9 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  type LucideIcon,
 } from "lucide-react";
-import type { Account, Transaction } from "../db/database";
+import type { Account, Category, Transaction } from "../db/database";
 import { formatMoney } from "../lib/money";
 import type { BalanceKindValue } from "./DashboardPage.styles";
 import {
@@ -56,6 +58,7 @@ type Period = "current" | "previous" | "3" | "6" | "12";
 interface DashboardPageProps {
   accounts: Account[];
   transactions: Transaction[];
+  categories: Category[];
   accountBalances: Map<number, number>;
   totalBalance: number;
   income: number;
@@ -154,41 +157,93 @@ function calculateBalanceAtDate(
   const movements = transactions
     .filter((transaction) => transaction.date <= endDate)
     .reduce((total, transaction) => {
-      if (!eligibleAccountIds.has(transaction.accountId)) {
-        return total;
-      }
+      if (transaction.type === "income") {
+        const accountId = transaction.accountId;
 
-      switch (transaction.type) {
-        case "income":
-          return total + transaction.amount;
-
-        case "expense":
-          return total - transaction.amount;
-
-        case "transfer": {
-          const destinationId = transaction.destinationAccountId;
-
-          if (
-            destinationId === undefined ||
-            !eligibleAccountIds.has(destinationId)
-          ) {
-            return total - transaction.amount;
-          }
-
+        if (accountId === undefined || !eligibleAccountIds.has(accountId)) {
           return total;
         }
 
-        default:
-          return total;
+        return total + transaction.amount;
       }
+
+      if (transaction.type === "expense") {
+        // Compras no cartão reduzem o saldo consolidado,
+        // mas não alteram o saldo bancário.
+        if (transaction.creditCardId !== undefined) {
+          return total - transaction.amount;
+        }
+
+        const accountId = transaction.accountId;
+
+        if (accountId === undefined || !eligibleAccountIds.has(accountId)) {
+          return total;
+        }
+
+        return total - transaction.amount;
+      }
+
+      if (transaction.type === "transfer") {
+        const sourceId = transaction.accountId;
+        const destinationId = transaction.destinationAccountId;
+
+        if (sourceId === undefined || !eligibleAccountIds.has(sourceId)) {
+          return total;
+        }
+
+        // Transferências entre contas elegíveis não alteram
+        // o patrimônio consolidado.
+        if (
+          destinationId !== undefined &&
+          eligibleAccountIds.has(destinationId)
+        ) {
+          return total;
+        }
+
+        // O dinheiro saiu de uma conta elegível para uma
+        // conta que não faz parte do saldo dessa data.
+        return total - transaction.amount;
+      }
+
+      return total;
     }, 0);
 
   return initialBalance + movements;
 }
 
+function normalizeCategoryName(name: string): string {
+  return name.trim().toLocaleLowerCase("pt-BR");
+}
+
+function getCategoryIconComponent(iconName: string | undefined): LucideIcon {
+  if (!iconName?.trim()) {
+    return Tags;
+  }
+
+  const componentName = iconName
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+
+  const icons = LucideIcons as unknown as Record<string, unknown>;
+  const icon = icons[componentName];
+
+  if (typeof icon === "object" && icon !== null) {
+    return icon as LucideIcon;
+  }
+
+  if (typeof icon === "function") {
+    return icon as LucideIcon;
+  }
+
+  return Tags;
+}
+
 export function DashboardPage({
   accounts,
   transactions,
+  categories,
   onNavigate,
   onNewTransaction,
   onNewAccount,
@@ -196,6 +251,17 @@ export function DashboardPage({
   onDeleteTransaction,
 }: DashboardPageProps) {
   const [period, setPeriod] = useState<Period>("current");
+
+  const categoriesByName = useMemo(
+    () =>
+      new Map(
+        categories.map((category) => [
+          normalizeCategoryName(category.name),
+          category,
+        ]),
+      ),
+    [categories],
+  );
 
   const periodRange = useMemo(() => getPeriodRange(period), [period]);
 
@@ -213,10 +279,7 @@ export function DashboardPage({
   const periodExpenses = sumTransactions(periodTransactions, "expense");
   const available = periodIncome - periodExpenses;
 
-  // Mostra quanto da renda do período permanece após as despesas.
-  // O resultado pode ser negativo se as despesas excederem a renda.
   const savingsRate = periodIncome > 0 ? (available / periodIncome) * 100 : 0;
-
   const progressPercentage = Math.max(0, Math.min(savingsRate, 100));
 
   const insightStatus =
@@ -272,7 +335,6 @@ export function DashboardPage({
     1,
     ...chartData.flatMap((item) => [item.income, item.expenses]),
   );
-
 
   const recentTransactions = [...transactions]
     .sort((a, b) => {
@@ -550,49 +612,78 @@ export function DashboardPage({
           </PanelHeading>
 
           <RecentTransactionsContent>
-            {recentTransactions.map((transaction) => (
-              <div className="recent-transaction" key={transaction.id}>
-                <div className="transaction-icon">
-                  {/* Mantenha aqui o ícone atual da transação */}
-                </div>
+            {recentTransactions.map((transaction) => {
+              const title =
+                transaction.title?.trim() ||
+                transaction.description?.trim() ||
+                (transaction.type === "transfer" ? "Transfer" : "Transaction");
 
-                <div className="transaction-description">
-                  <strong>{transaction.description}</strong>
-                  <span>
-                    {transaction.category} · {transaction.date}
-                  </span>
-                </div>
+              const category = categoriesByName.get(
+                normalizeCategoryName(transaction.category || ""),
+              );
 
-                <strong
-                  className={`transaction-amount ${
-                    transaction.type === "income" ? "income" : "expense"
-                  }`}
-                >
-                  {transaction.type === "income" ? "+" : "−"}
-                  {formatMoney(transaction.amount)}
-                </strong>
+              const CategoryIcon =
+                transaction.type === "transfer"
+                  ? Wallet
+                  : getCategoryIconComponent(category?.icon);
 
-                <div className="transaction-actions">
-                  <button
-                    type="button"
-                    aria-label={`Edit ${transaction.description}`}
-                    title="Edit"
-                    onClick={() => onEditTransaction(transaction)}
+              const categoryLabel =
+                transaction.type === "transfer"
+                  ? "Transfer"
+                  : transaction.category?.trim() || "Uncategorized";
+
+              return (
+                <div className="recent-transaction" key={transaction.id}>
+                  <div className="transaction-icon">
+                    <CategoryIcon size={19} aria-hidden="true" />
+                  </div>
+
+                  <div className="transaction-description">
+                    <strong>{title}</strong>
+                    <span>
+                      {categoryLabel} · {transaction.date}
+                    </span>
+                  </div>
+
+                  <strong
+                    className={`transaction-amount ${
+                      transaction.type === "income"
+                        ? "income"
+                        : transaction.type === "expense"
+                          ? "expense"
+                          : "transfer"
+                    }`}
                   >
-                    <Pencil size={15} />
-                  </button>
+                    {transaction.type === "income"
+                      ? "+"
+                      : transaction.type === "expense"
+                        ? "−"
+                        : ""}
+                    {formatMoney(transaction.amount)}
+                  </strong>
 
-                  <button
-                    type="button"
-                    aria-label={`Delete ${transaction.description}`}
-                    title="Delete"
-                    onClick={() => onDeleteTransaction(transaction)}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  <div className="transaction-actions">
+                    <button
+                      type="button"
+                      aria-label={`Edit ${title}`}
+                      title="Edit"
+                      onClick={() => onEditTransaction(transaction)}
+                    >
+                      <Pencil size={15} />
+                    </button>
+
+                    <button
+                      type="button"
+                      aria-label={`Delete ${title}`}
+                      title="Delete"
+                      onClick={() => onDeleteTransaction(transaction)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </RecentTransactionsContent>
         </Panel>
 
@@ -661,7 +752,12 @@ export function DashboardPage({
                   ? "Add recurring bills to get reminders here."
                   : `${upcomingBills
                       .slice(0, 2)
-                      .map((transaction) => transaction.description)
+                      .map(
+                        (transaction) =>
+                          transaction.title?.trim() ||
+                          transaction.description?.trim() ||
+                          "Expense",
+                      )
                       .join(
                         " and ",
                       )} — check their due dates and payment status.`}

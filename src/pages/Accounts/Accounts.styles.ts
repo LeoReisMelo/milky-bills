@@ -6,7 +6,7 @@ export const AccountsContainer = styled.main`
   gap: 28px;
   width: 100%;
   min-width: 0;
-  color: #29252a;
+  color: var(--color-text);
 `;
 
 export const AccountHeader = styled.header`
@@ -23,6 +23,7 @@ export const AccountHeader = styled.header`
 
 export const AccountName = styled.h1`
   margin: 0;
+  color: var(--color-text);
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.3;
@@ -31,7 +32,7 @@ export const AccountName = styled.h1`
 
 export const FormSubtitle = styled.p`
   margin: 7px 0 0;
-  color: #77717a;
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   line-height: 1.6;
 `;
@@ -43,9 +44,9 @@ export const PrimaryButton = styled.button`
   gap: 8px;
   min-height: 44px;
   padding: 0 17px;
-  border: 1px solid #d9799a;
+  border: 1px solid var(--color-primary);
   border-radius: 12px;
-  background: #d9799a;
+  background: var(--color-primary);
   color: #fff;
   font: inherit;
   font-size: 0.875rem;
@@ -54,11 +55,12 @@ export const PrimaryButton = styled.button`
   transition:
     background 160ms ease,
     border-color 160ms ease,
-    transform 160ms ease;
+    transform 160ms ease,
+    box-shadow 160ms ease;
 
   &:hover:not(:disabled) {
-    background: #c76689;
-    border-color: #c76689;
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
   }
 
   &:active:not(:disabled) {
@@ -66,7 +68,7 @@ export const PrimaryButton = styled.button`
   }
 
   &:focus-visible {
-    outline: 3px solid #f2bfd0;
+    outline: 3px solid var(--color-primary-glow);
     outline-offset: 3px;
   }
 
@@ -95,9 +97,17 @@ export const SummaryCard = styled.article`
   row-gap: 5px;
   min-height: 116px;
   padding: 22px;
-  border: 1px solid #eee9ed;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+
+  &:hover {
+    border-color: var(--color-border-strong);
+  }
 `;
 
 export const AccountIcon = styled.div`
@@ -108,19 +118,20 @@ export const AccountIcon = styled.div`
   width: 44px;
   height: 44px;
   border-radius: 13px;
-  background: #fff0f5;
-  color: #c76689;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 `;
 
 export const SummaryLabel = styled.p`
   margin: 0;
-  color: #77717a;
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 `;
 
 export const SummaryValue = styled.p`
   margin: 0;
   overflow-wrap: anywhere;
+  color: var(--color-text);
   font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -145,14 +156,17 @@ export const SearchBox = styled.div`
   width: min(100%, 460px);
   min-height: 46px;
   padding: 0 13px;
-  border: 1px solid #e9e3e8;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: #fff;
-  color: #89818b;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 
   &:focus-within {
-    border-color: #d9799a;
-    box-shadow: 0 0 0 3px rgb(217 121 154 / 12%);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
   }
 
   @media (max-width: 560px) {
@@ -168,21 +182,27 @@ export const Input = styled.input`
   border: 0;
   outline: none;
   background: transparent;
-  color: #29252a;
+  color: var(--color-text);
   font: inherit;
   font-size: 0.875rem;
 
   &::placeholder {
-    color: #a49ca5;
+    color: var(--color-text-secondary);
+    opacity: 0.75;
   }
 
   &:focus-visible {
     outline: none;
   }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
 `;
 
 export const ToolbarCount = styled.span`
-  color: #77717a;
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
   white-space: nowrap;
 `;
@@ -207,16 +227,18 @@ export const AccountCard = styled.article`
   gap: 20px;
   min-width: 0;
   padding: 21px;
-  border: 1px solid #eee9ed;
+  border: 1px solid var(--color-border);
   border-radius: 16px;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   transition:
     border-color 160ms ease,
-    box-shadow 160ms ease;
+    box-shadow 160ms ease,
+    background 160ms ease;
 
   &:hover {
-    border-color: #e6c5d2;
-    box-shadow: 0 8px 24px rgb(41 37 42 / 4%);
+    border-color: var(--color-border-strong);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 5%);
   }
 `;
 
@@ -242,9 +264,10 @@ export const InstitutionLogo = styled.div`
   width: 48px;
   height: 48px;
   overflow: hidden;
-  border: 1px solid #f0ebef;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-surface-elevated, var(--color-background));
+  color: var(--color-text);
 
   svg {
     display: block;
@@ -257,7 +280,7 @@ export const InstitutionLogo = styled.div`
 
 export const AccountInstitution = styled.p`
   margin: 0 0 4px;
-  color: #77717a;
+  color: var(--color-text-secondary);
   font-size: 0.75rem;
 `;
 
@@ -267,10 +290,10 @@ export const AccountTypeBadge = styled.span`
   align-items: center;
   width: fit-content;
   padding: 6px 10px;
-  border: 1px solid #f0e5eb;
+  border: 1px solid var(--color-primary-border);
   border-radius: 999px;
-  background: #fff7fa;
-  color: #a44f70;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   font-size: 0.75rem;
   font-weight: 600;
 `;
@@ -292,7 +315,7 @@ export const ActionButton = styled.button`
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
-  color: #77717a;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition:
     color 150ms ease,
@@ -300,13 +323,13 @@ export const ActionButton = styled.button`
     border-color 150ms ease;
 
   &:hover:not(:disabled) {
-    border-color: #f0e5eb;
-    background: #fff3f7;
-    color: #bd5e82;
+    border-color: var(--color-primary-border);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
   }
 
   &:focus-visible {
-    outline: 2px solid #d9799a;
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
 
@@ -321,17 +344,18 @@ export const AccountBalance = styled.div`
   flex-direction: column;
   gap: 6px;
   padding-top: 17px;
-  border-top: 1px solid #f0ebef;
+  border-top: 1px solid var(--color-border);
 `;
 
 export const BalanceLabel = styled.span`
-  color: #77717a;
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 `;
 
 export const BalanceValue = styled.p`
   margin: 0;
   overflow-wrap: anywhere;
+  color: var(--color-text);
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.04em;
@@ -346,9 +370,10 @@ export const AccountsEmpty = styled.div`
   gap: 12px;
   min-height: 290px;
   padding: 32px 20px;
-  border: 1px dashed #e7dce4;
+  border: 1px dashed var(--color-border-strong);
   border-radius: 16px;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
 
   ${AccountIcon} {
     margin-bottom: 4px;
@@ -374,7 +399,7 @@ export const FormOverlay = styled.div`
   justify-content: center;
   overflow-y: auto;
   padding: 24px;
-  background: rgb(25 20 25 / 48%);
+  background: rgb(0 0 0 / 58%);
   backdrop-filter: blur(4px);
 
   @media (max-width: 560px) {
@@ -388,10 +413,11 @@ export const FormPanel = styled.div`
   max-height: min(90dvh, 850px);
   overflow-y: auto;
   padding: 26px;
-  border: 1px solid #f0e9ee;
+  border: 1px solid var(--color-border);
   border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 24px 80px rgb(25 20 25 / 18%);
+  background: var(--color-surface-elevated, var(--color-surface));
+  color: var(--color-text);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 24%);
 
   @media (max-width: 560px) {
     width: 100%;
@@ -411,6 +437,7 @@ export const FormHeading = styled.div`
 
 export const FormTitle = styled.h2`
   margin: 0;
+  color: var(--color-text);
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.035em;
@@ -431,12 +458,12 @@ export const Field = styled.div`
 `;
 
 export const Label = styled.label`
-  color: #39333b;
+  color: var(--color-text);
   font-size: 0.8125rem;
   font-weight: 600;
 
   span {
-    color: #8d848e;
+    color: var(--color-text-secondary);
     font-weight: 400;
   }
 `;
@@ -467,10 +494,15 @@ export const InstitutionButton = styled.button<{
   min-width: 0;
   min-height: 94px;
   padding: 10px 6px;
-  border: 1px solid ${({ $selected }) => ($selected ? "#d9799a" : "#eee7ed")};
+  border: 1px solid
+    ${({ $selected }) =>
+      $selected ? "var(--color-primary)" : "var(--color-border)"};
   border-radius: 12px;
-  background: ${({ $selected }) => ($selected ? "#fff5f8" : "#fff")};
-  color: #39333b;
+  background: ${({ $selected }) =>
+    $selected
+      ? "var(--color-primary-soft)"
+      : "var(--color-surface-elevated, var(--color-surface))"};
+  color: var(--color-text);
   font: inherit;
   cursor: pointer;
   transition:
@@ -478,11 +510,11 @@ export const InstitutionButton = styled.button<{
     background 150ms ease;
 
   &:hover {
-    border-color: #d9799a;
+    border-color: var(--color-primary);
   }
 
   &:focus-visible {
-    outline: 2px solid #d9799a;
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
 
@@ -490,14 +522,14 @@ export const InstitutionButton = styled.button<{
     position: absolute;
     top: 6px;
     right: 6px;
-    color: #c76689;
+    color: var(--color-primary);
   }
 `;
 
 export const InstitutionName = styled.span`
   width: 100%;
   overflow-wrap: anywhere;
-  color: #4d454e;
+  color: var(--color-text);
   font-size: 0.6875rem;
   font-weight: 600;
   line-height: 1.35;
@@ -509,17 +541,23 @@ export const Select = styled.select`
   min-height: 46px;
   appearance: none;
   padding: 0 38px 0 12px;
-  border: 1px solid #e9e3e8;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   outline: none;
-  background: #fff;
-  color: #29252a;
+  background: var(--color-surface);
+  color: var(--color-text);
   font: inherit;
   font-size: 0.875rem;
+  color-scheme: light dark;
+
+  option {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
 
   &:focus {
-    border-color: #d9799a;
-    box-shadow: 0 0 0 3px rgb(217 121 154 / 12%);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
   }
 `;
 
@@ -529,23 +567,27 @@ export const InputAdornment = styled.div`
   gap: 10px;
   min-height: 46px;
   padding: 0 12px;
-  border: 1px solid #e9e3e8;
+  border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: #fff;
-  color: #77717a;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 
   &:focus-within {
-    border-color: #d9799a;
-    box-shadow: 0 0 0 3px rgb(217 121 154 / 12%);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-glow);
   }
 
   > span {
+    color: var(--color-text-secondary);
     font-size: 0.875rem;
   }
 
   ${Input} {
     min-height: 42px;
-    color: #29252a;
+    color: var(--color-text);
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
@@ -565,17 +607,17 @@ export const FormGrid = styled.div`
     right: 12px;
     bottom: 15px;
     pointer-events: none;
-    color: #77717a;
+    color: var(--color-text-secondary);
   }
 `;
 
 export const FieldError = styled.p`
   margin: 0;
   padding: 11px 12px;
-  border: 1px solid #f2c8cf;
+  border: 1px solid var(--color-expense);
   border-radius: 10px;
-  background: #fff5f5;
-  color: #a72c42;
+  background: var(--color-expense-soft);
+  color: var(--color-expense);
   font-size: 0.8125rem;
   line-height: 1.5;
 `;
@@ -598,21 +640,25 @@ export const FormActions = styled.div`
 export const CancelButton = styled.button`
   min-height: 44px;
   padding: 0 16px;
-  border: 1px solid #e9e3e8;
+  border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: #fff;
-  color: #4d454e;
+  background: var(--color-surface);
+  color: var(--color-text);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
 
   &:hover:not(:disabled) {
-    background: #faf7f9;
+    border-color: var(--color-border-strong);
+    background: var(--color-background);
   }
 
   &:focus-visible {
-    outline: 2px solid #d9799a;
+    outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
 

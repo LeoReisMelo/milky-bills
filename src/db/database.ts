@@ -9,6 +9,18 @@ export type AccountType =
   | "cash"
   | "credit";
 
+export const DEFAULT_CATEGORIES = [
+  "Moradia",
+  "Alimentação",
+  "Transporte",
+  "Saúde",
+  "Lazer",
+  "Educação",
+  "Salário",
+  "Investimentos",
+  "Outros",
+] as const;
+
 export type TransactionType = "income" | "expense" | "transfer";
 
 export interface Account {
@@ -29,8 +41,10 @@ export interface TransactionAttachment {
 
 export interface Transaction {
   id?: number;
-  accountId: number;
+  accountId?: number;
   destinationAccountId?: number;
+  creditCardId?: number;
+  recurringId?: number;
   type: TransactionType;
   title: string;
   description: string;
@@ -52,22 +66,56 @@ export interface Category {
   createdAt: string;
 }
 
-export const DEFAULT_CATEGORIES = [
-  "Moradia",
-  "Alimentação",
-  "Transporte",
-  "Saúde",
-  "Lazer",
-  "Educação",
-  "Salário",
-  "Investimentos",
-  "Outros",
-] as const;
+export type CardBrand =
+  | "Visa"
+  | "Mastercard"
+  | "Elo"
+  | "American Express"
+  | "Hipercard"
+  | "Outra";
+
+export interface CreditCard {
+  id?: number;
+  name: string;
+  bank: string;
+  brand: CardBrand;
+  lastFourDigits: string;
+  creditLimit: number;
+  closingDay: number;
+  dueDay: number;
+  color: string;
+  holder: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RecurrenceFrequency = "weekly" | "monthly" | "yearly";
+
+export type RecurrenceStatus = "active" | "paused" | "concluded";
+
+export interface RecurringTransaction {
+  id?: number;
+  title: string;
+  description: string;
+  type: CategoryType;
+  amount: number;
+  frequency: RecurrenceFrequency;
+  nextOccurrenceDate: string;
+  endDate: string;
+  category: string;
+  accountId?: number;
+  creditCardId?: number;
+  status: RecurrenceStatus;
+  createdAt: string;
+  updatedAt: string;
+}
 
 class MilkyBillsDatabase extends Dexie {
   accounts!: EntityTable<Account, "id">;
   transactions!: EntityTable<Transaction, "id">;
   categories!: EntityTable<Category, "id">;
+  creditCards!: EntityTable<CreditCard, "id">;
+  recurringTransactions!: EntityTable<RecurringTransaction, "id">;
 
   constructor() {
     super("milky-bills");
@@ -86,36 +134,25 @@ class MilkyBillsDatabase extends Dexie {
       .upgrade(async (transaction) => {
         const categoriesTable = transaction.table("categories");
         const transactionsTable = transaction.table("transactions");
-        const existingTransactions = await transactionsTable.toArray();
-        const names = new Map<string, string>();
+        const existing = await categoriesTable.toArray();
+        const names = new Set(
+          existing.map((category: { name: string }) => category.name),
+        );
 
-        for (const name of DEFAULT_CATEGORIES) {
-          names.set(name.trim().toLocaleLowerCase("pt-BR"), name);
-        }
+        for (const item of await transactionsTable.toArray()) {
+          const categoryName = (item as { category?: string }).category?.trim();
 
-        for (const item of existingTransactions) {
-          if (
-            item.type !== "transfer" &&
-            typeof item.category === "string" &&
-            item.category.trim()
-          ) {
-            const name = item.category.trim();
-            const normalized = name.toLocaleLowerCase("pt-BR");
-
-            if (!names.has(normalized)) {
-              names.set(normalized, name);
-            }
+          if (categoryName && !names.has(categoryName)) {
+            await categoriesTable.add({
+              name: categoryName,
+              description: "",
+              type: "expense",
+              icon: "tag",
+              createdAt: new Date().toISOString(),
+            });
+            names.add(categoryName);
           }
         }
-
-        const createdAt = new Date().toISOString();
-
-        await categoriesTable.bulkAdd(
-          [...names.values()].map((name) => ({
-            name,
-            createdAt,
-          })),
-        );
       });
 
     this.version(3)
@@ -126,22 +163,14 @@ class MilkyBillsDatabase extends Dexie {
       })
       .upgrade(async (transaction) => {
         const categoriesTable = transaction.table("categories");
-        const existingCategories = await categoriesTable.toArray();
-        const incomeNames = new Set(["salário", "investimentos"]);
-        const now = new Date().toISOString();
+        const items = await categoriesTable.toArray();
 
-        for (const category of existingCategories) {
-          const normalizedName = String(category.name)
-            .trim()
-            .toLocaleLowerCase("pt-BR");
-
-          await categoriesTable.update(category.id, {
-            description: category.description ?? "",
-            type:
-              category.type ??
-              (incomeNames.has(normalizedName) ? "income" : "expense"),
-            icon: category.icon ?? "circle-dollar-sign",
-            createdAt: category.createdAt ?? now,
+        for (const item of items) {
+          await categoriesTable.update(item.id, {
+            description: item.description ?? "",
+            type: item.type ?? "expense",
+            icon: item.icon ?? "tag",
+            createdAt: item.createdAt ?? new Date().toISOString(),
           });
         }
       });
@@ -154,16 +183,17 @@ class MilkyBillsDatabase extends Dexie {
       })
       .upgrade(async (transaction) => {
         const accountsTable = transaction.table("accounts");
-        const existingAccounts = await accountsTable.toArray();
+        const items = await accountsTable.toArray();
 
-        for (const account of existingAccounts) {
-          await accountsTable.update(account.id, {
-            institutionId: account.institutionId ?? "other",
-            initialBalance: account.initialBalance ?? 0,
-            createdAt: account.createdAt ?? new Date().toISOString(),
+        for (const item of items) {
+          await accountsTable.update(item.id, {
+            institutionId: item.institutionId ?? "",
+            initialBalance: item.initialBalance ?? 0,
+            createdAt: item.createdAt ?? new Date().toISOString(),
           });
         }
       });
+
     this.version(5)
       .stores({
         accounts: "++id, name, institutionId, type, createdAt",
@@ -172,15 +202,33 @@ class MilkyBillsDatabase extends Dexie {
       })
       .upgrade(async (transaction) => {
         const transactionsTable = transaction.table("transactions");
-        const existingTransactions = await transactionsTable.toArray();
+        const items = await transactionsTable.toArray();
 
-        for (const item of existingTransactions) {
+        for (const item of items) {
           await transactionsTable.update(item.id, {
             title: item.title ?? item.description ?? "",
             description: item.description ?? "",
           });
         }
       });
+
+    this.version(6).stores({
+      accounts: "++id, name, institutionId, type, createdAt",
+      transactions:
+        "++id, accountId, creditCardId, type, date, category, createdAt",
+      categories: "++id, &name, type, createdAt",
+      creditCards: "++id, name, bank, brand, createdAt, updatedAt",
+    });
+
+    this.version(7).stores({
+      accounts: "++id, name, institutionId, type, createdAt",
+      transactions:
+        "++id, accountId, creditCardId, recurringId, type, date, category, createdAt",
+      categories: "++id, &name, type, createdAt",
+      creditCards: "++id, name, bank, brand, createdAt, updatedAt",
+      recurringTransactions:
+        "++id, type, status, frequency, nextOccurrenceDate, endDate, accountId, creditCardId, createdAt",
+    });
   }
 }
 

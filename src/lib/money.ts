@@ -1,4 +1,3 @@
-
 import type { Account, Transaction } from "../db/database";
 
 export interface MonthlySummary {
@@ -23,9 +22,7 @@ export function toCents(value: string | number): number {
   }
 
   if (amount <= 0) {
-    throw new Error(
-      "A transação precisa ter um valor maior que zero.",
-    );
+    throw new Error("A transação precisa ter um valor maior que zero.");
   }
 
   const cents = Math.round(amount * 100);
@@ -48,9 +45,7 @@ export function today(): string {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
 
-  return new Date(now.getTime() - offset)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
 export function currentMonth(): string {
@@ -98,6 +93,11 @@ export function calculateAccountBalances(
 
   for (const transaction of transactions) {
     const sourceId = transaction.accountId;
+
+    if (sourceId === undefined) {
+      continue;
+    }
+
     const sourceBalance = balances.get(sourceId);
 
     if (sourceBalance === undefined) {
@@ -107,8 +107,6 @@ export function calculateAccountBalances(
     if (transaction.type === "transfer") {
       const destinationId = transaction.destinationAccountId;
 
-      // Uma transferência válida precisa ter duas contas distintas.
-      // Registros incompletos não devem alterar os saldos.
       if (
         destinationId === undefined ||
         destinationId === sourceId ||
@@ -117,23 +115,53 @@ export function calculateAccountBalances(
         continue;
       }
 
-      balances.set(sourceId, sourceBalance - transaction.amount);
+      const destinationBalance = balances.get(destinationId);
 
-      balances.set(
-        destinationId,
-        balances.get(destinationId)! + transaction.amount,
-      );
+      if (destinationBalance === undefined) {
+        continue;
+      }
+
+      balances.set(sourceId, sourceBalance - transaction.amount);
+      balances.set(destinationId, destinationBalance + transaction.amount);
 
       continue;
     }
 
+    // Despesas feitas no cartão não alteram o saldo bancário.
+    if (transaction.creditCardId !== undefined) {
+      continue;
+    }
+
     const delta =
-      transaction.type === "income"
-        ? transaction.amount
-        : -transaction.amount;
+      transaction.type === "income" ? transaction.amount : -transaction.amount;
 
     balances.set(sourceId, sourceBalance + delta);
   }
 
   return balances;
+}
+
+export function calculateConsolidatedBalance(
+  accounts: Account[],
+  transactions: Transaction[],
+): number {
+  const accountBalances = calculateAccountBalances(accounts, transactions);
+
+  const totalAccountBalance = Array.from(accountBalances.values()).reduce(
+    (total, balance) => total + balance,
+    0,
+  );
+
+  const cardExpenses = transactions.reduce((total, transaction) => {
+    if (
+      transaction.type === "expense" &&
+      transaction.creditCardId !== undefined
+    ) {
+      return total + transaction.amount;
+    }
+
+    return total;
+  }, 0);
+
+  return totalAccountBalance - cardExpenses;
 }

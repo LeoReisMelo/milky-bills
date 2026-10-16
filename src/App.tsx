@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   db,
-  DEFAULT_CATEGORIES,
   type Account,
   type Category,
   type CategoryType,
+  type CreditCard,
+  type RecurrenceStatus,
+  type RecurringTransaction,
   type Transaction,
   type TransactionType,
 } from "./db/database";
@@ -15,6 +17,10 @@ import {
   today,
   toCents,
 } from "./lib/money";
+import {
+  calculateCardReservations,
+  processDueRecurrences,
+} from "./lib/recurring";
 import { downloadBackup } from "./lib/backup";
 import { AppLayout } from "./components/layout/AppLayout";
 import type { Page, Theme } from "./types/app";
@@ -24,7 +30,12 @@ import {
   AccountsPage,
   type AccountFormData,
 } from "./pages/Accounts/AccountsPage";
-import { TransactionsPage } from "./pages/Transactions/TransactionsPage";
+import {
+  TransactionsPage,
+  type TransactionFormData,
+} from "./pages/Transactions/TransactionsPage";
+import { CardsPage } from "./pages/Cards/CardsPage";
+import RecurringPage from "./pages/Recurring/RecurringPage";
 
 type DashboardPeriod = "this-month" | "last-month" | "last-3-months" | "custom";
 
@@ -39,6 +50,13 @@ type MonthlyData = {
   income: number;
   expenses: number;
 };
+
+type CreditCardFormData = Omit<CreditCard, "id" | "createdAt" | "updatedAt">;
+
+type RecurringFormData = Omit<
+  RecurringTransaction,
+  "id" | "createdAt" | "updatedAt"
+>;
 
 function monthStart(offset = 0) {
   const now = new Date();
@@ -93,6 +111,9 @@ function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
+  const [recurrences, setRecurrences] = useState<RecurringTransaction[]>([]);
+
   const [_online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -107,6 +128,7 @@ function App() {
 
   const [categoryName, setCategoryName] = useState("");
   const [notice, setNotice] = useState("");
+
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       const savedTheme = localStorage.getItem("milky-bills-theme");
@@ -146,6 +168,9 @@ function App() {
   >(null);
 
   async function refresh() {
+    // Lança as ocorrências vencidas antes de carregar as transações.
+    await processDueRecurrences();
+
     let storedCategories = await db.categories.toArray();
 
     const defaultCategories = [
@@ -215,16 +240,13 @@ function App() {
         })),
       );
     } else {
-      // Corrige os ícones antigos sem sobrescrever escolhas personalizadas.
+      // Corrige ícones antigos sem sobrescrever escolhas personalizadas.
       await db.transaction("rw", db.categories, async () => {
         for (const defaultCategory of defaultCategories) {
           const existing = storedCategories.find(
             (category) =>
-              category.name
-                .trim()
-                .normalize("NFKC")
-                .toLocaleLowerCase("pt-BR") ===
-              defaultCategory.name.normalize("NFKC").toLocaleLowerCase("pt-BR"),
+              normalizeCategoryName(category.name) ===
+              normalizeCategoryName(defaultCategory.name),
           );
 
           if (
@@ -241,9 +263,16 @@ function App() {
 
     storedCategories = await db.categories.toArray();
 
-    const [storedAccounts, storedTransactions] = await Promise.all([
+    const [
+      storedAccounts,
+      storedTransactions,
+      storedCreditCards,
+      storedRecurrences,
+    ] = await Promise.all([
       db.accounts.toArray(),
       db.transactions.toArray(),
+      db.creditCards.toArray(),
+      db.recurringTransactions.toArray(),
     ]);
 
     setAccounts(storedAccounts);
@@ -255,12 +284,24 @@ function App() {
     setCategories(
       storedCategories.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     );
+
+    setCreditCards(
+      storedCreditCards.sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    );
+
+    setRecurrences(
+      storedRecurrences.sort((a, b) =>
+        a.nextOccurrenceDate.localeCompare(b.nextOccurrenceDate),
+      ),
+    );
   }
 
   useEffect(() => {
-    // O carregamento inicial lê o IndexedDB e sincroniza os estados da aplicação.
+    // O carregamento inicial lê o IndexedDB e sincroniza os estados.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
+    void refresh().catch(() => {
+      setNotice("Não foi possível carregar os dados financeiros.");
+    });
 
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
@@ -291,6 +332,35 @@ function App() {
     () => [...accountBalances.values()].reduce((sum, value) => sum + value, 0),
     [accountBalances],
   );
+
+  // Despesas lançadas + parcelas futuras reservadas nas recorrências ativas.
+  const expensesByCard = useMemo(() => {
+    const postedExpenses = transactions.reduce<Record<number, number>>(
+      (totals, transaction) => {
+        if (
+          transaction.type === "expense" &&
+          transaction.creditCardId !== undefined
+        ) {
+          totals[transaction.creditCardId] =
+            (totals[transaction.creditCardId] ?? 0) + transaction.amount;
+        }
+
+        return totals;
+      },
+      {},
+    );
+
+    const reservations = calculateCardReservations(recurrences);
+
+    for (const [cardId, amount] of Object.entries(reservations)) {
+      const numericCardId = Number(cardId);
+
+      postedExpenses[numericCardId] =
+        (postedExpenses[numericCardId] ?? 0) + amount;
+    }
+
+    return postedExpenses;
+  }, [transactions, recurrences]);
 
   const monthTransactions = transactions.filter(
     (transaction) => transaction.date.slice(0, 7) === currentMonth(),
@@ -468,18 +538,108 @@ function App() {
     setNotice("Conta atualizada com sucesso.");
   }
 
-  async function createTransaction(data: {
-    title: string;
-    description: string;
-    amount: number;
-    type: TransactionType;
-    category: string;
-    accountId: number;
-    date: string;
-  }) {
+  async function createCreditCard(data: CreditCardFormData) {
+    const now = new Date().toISOString();
+
+    await db.creditCards.add({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await refresh();
+    setNotice("Cartão cadastrado com sucesso.");
+  }
+
+  async function updateCreditCard(id: number, data: CreditCardFormData) {
+    await db.creditCards.update(id, {
+      ...data,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await refresh();
+    setNotice("Cartão atualizado com sucesso.");
+  }
+
+  async function deleteCreditCard(id: number) {
+    const linkedTransactions = await db.transactions
+      .where("creditCardId")
+      .equals(id)
+      .count();
+
+    if (linkedTransactions > 0) {
+      setNotice(
+        "Este cartão possui transações vinculadas. Remova ou transfira essas transações antes de excluí-lo.",
+      );
+      return;
+    }
+
+    const linkedRecurrences = await db.recurringTransactions
+      .where("creditCardId")
+      .equals(id)
+      .filter((recurrence) => recurrence.status !== "concluded")
+      .count();
+
+    if (linkedRecurrences > 0) {
+      setNotice(
+        "Este cartão está vinculado a recorrências ativas ou pausadas. Remova essas recorrências antes de excluí-lo.",
+      );
+      return;
+    }
+
+    const card = creditCards.find((item) => item.id === id);
+
+    if (
+      !window.confirm(
+        `Deseja realmente excluir o cartão "${card?.name ?? "selecionado"}"?`,
+      )
+    ) {
+      return;
+    }
+
+    await db.creditCards.delete(id);
+    await refresh();
+    setNotice("Cartão excluído com sucesso.");
+  }
+
+  async function createTransaction(data: TransactionFormData): Promise<void> {
+    const usesCreditCard =
+      data.type === "expense" && data.creditCardId !== undefined;
+
+    if (data.creditCardId !== undefined && !usesCreditCard) {
+      setNotice("Cartões de crédito só podem ser usados em despesas.");
+      return;
+    }
+
+    if (usesCreditCard) {
+      const cardExists = creditCards.some(
+        (card) => card.id === data.creditCardId,
+      );
+
+      if (!cardExists) {
+        setNotice("Selecione um cartão de crédito válido.");
+        return;
+      }
+    } else {
+      const accountExists = accounts.some(
+        (account) => account.id === data.accountId,
+      );
+
+      if (data.accountId === undefined || !accountExists) {
+        setNotice("Selecione uma conta válida.");
+        return;
+      }
+    }
+
+    const now = new Date().toISOString();
+
     await db.transactions.add({
       ...data,
-      createdAt: new Date().toISOString(),
+      accountId: usesCreditCard ? undefined : data.accountId,
+      creditCardId: usesCreditCard ? data.creditCardId : undefined,
+      title: data.title.trim() || data.description.trim(),
+      description: data.description.trim(),
+      createdAt: now,
     });
 
     await refresh();
@@ -488,19 +648,223 @@ function App() {
 
   async function editTransaction(
     transactionId: number,
-    data: {
-      description: string;
-      amount: number;
-      type: TransactionType;
-      category: string;
-      accountId: number;
-      date: string;
-    },
-  ) {
-    await db.transactions.update(transactionId, data);
+    data: TransactionFormData,
+  ): Promise<void> {
+    const usesCreditCard =
+      data.type === "expense" && data.creditCardId !== undefined;
+
+    if (data.creditCardId !== undefined && !usesCreditCard) {
+      setNotice("Cartões de crédito só podem ser usados em despesas.");
+      return;
+    }
+
+    if (usesCreditCard) {
+      const cardExists = creditCards.some(
+        (card) => card.id === data.creditCardId,
+      );
+
+      if (!cardExists) {
+        setNotice("Selecione um cartão de crédito válido.");
+        return;
+      }
+    } else {
+      const accountExists = accounts.some(
+        (account) => account.id === data.accountId,
+      );
+
+      if (data.accountId === undefined || !accountExists) {
+        setNotice("Selecione uma conta válida.");
+        return;
+      }
+    }
+
+    const existingTransaction = await db.transactions.get(transactionId);
+
+    if (!existingTransaction) {
+      setNotice("Não foi possível encontrar a transação para atualizar.");
+      await refresh();
+      return;
+    }
+
+    await db.transactions.update(transactionId, {
+      ...data,
+      accountId: usesCreditCard ? undefined : data.accountId,
+      creditCardId: usesCreditCard ? data.creditCardId : undefined,
+      title: data.title.trim() || data.description.trim(),
+      description: data.description.trim(),
+    });
 
     await refresh();
     setNotice("Transação atualizada com sucesso.");
+  }
+
+  async function createRecurring(data: RecurringFormData): Promise<void> {
+    const usesCreditCard = data.creditCardId !== undefined;
+    const usesAccount = data.accountId !== undefined;
+
+    if (usesCreditCard && usesAccount) {
+      throw new Error("Selecione uma conta ou um cartão, não os dois.");
+    }
+
+    if (usesCreditCard && data.type !== "expense") {
+      throw new Error("Recorrências vinculadas a cartão devem ser despesas.");
+    }
+
+    if (usesCreditCard) {
+      const cardExists = creditCards.some(
+        (card) => card.id === data.creditCardId,
+      );
+
+      if (!cardExists) {
+        throw new Error("Selecione um cartão de crédito válido.");
+      }
+    }
+
+    if (usesAccount) {
+      const accountExists = accounts.some(
+        (account) => account.id === data.accountId,
+      );
+
+      if (!accountExists) {
+        throw new Error("Selecione uma conta válida.");
+      }
+    }
+
+    if (data.nextOccurrenceDate > data.endDate) {
+      throw new Error(
+        "A próxima ocorrência não pode ser posterior à data final.",
+      );
+    }
+
+    if (data.amount <= 0 || !Number.isFinite(data.amount)) {
+      throw new Error("Informe um valor válido para a recorrência.");
+    }
+
+    const now = new Date().toISOString();
+
+    await db.recurringTransactions.add({
+      ...data,
+      title: data.title.trim(),
+      description: data.description.trim(),
+      accountId: usesCreditCard ? undefined : data.accountId,
+      creditCardId: usesCreditCard ? data.creditCardId : undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await refresh();
+    setNotice("Recorrência criada com sucesso.");
+  }
+
+  async function updateRecurring(
+    id: number,
+    data: RecurringFormData,
+  ): Promise<void> {
+    const existing = await db.recurringTransactions.get(id);
+
+    if (!existing) {
+      throw new Error("Não foi possível encontrar a recorrência.");
+    }
+
+    const usesCreditCard = data.creditCardId !== undefined;
+    const usesAccount = data.accountId !== undefined;
+
+    if (usesCreditCard && usesAccount) {
+      throw new Error("Selecione uma conta ou um cartão, não os dois.");
+    }
+
+    if (usesCreditCard && data.type !== "expense") {
+      throw new Error("Recorrências vinculadas a cartão devem ser despesas.");
+    }
+
+    if (usesCreditCard) {
+      const cardExists = creditCards.some(
+        (card) => card.id === data.creditCardId,
+      );
+
+      if (!cardExists) {
+        throw new Error("Selecione um cartão de crédito válido.");
+      }
+    }
+
+    if (usesAccount) {
+      const accountExists = accounts.some(
+        (account) => account.id === data.accountId,
+      );
+
+      if (!accountExists) {
+        throw new Error("Selecione uma conta válida.");
+      }
+    }
+
+    if (data.nextOccurrenceDate > data.endDate) {
+      throw new Error(
+        "A próxima ocorrência não pode ser posterior à data final.",
+      );
+    }
+
+    if (data.amount <= 0 || !Number.isFinite(data.amount)) {
+      throw new Error("Informe um valor válido para a recorrência.");
+    }
+
+    await db.recurringTransactions.update(id, {
+      ...data,
+      title: data.title.trim(),
+      description: data.description.trim(),
+      accountId: usesCreditCard ? undefined : data.accountId,
+      creditCardId: usesCreditCard ? data.creditCardId : undefined,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await refresh();
+    setNotice("Recorrência atualizada com sucesso.");
+  }
+
+  async function changeRecurringStatus(
+    id: number,
+    status: RecurrenceStatus,
+  ): Promise<void> {
+    if (status !== "active" && status !== "paused") {
+      throw new Error("Status inválido para esta operação.");
+    }
+
+    const recurrence = await db.recurringTransactions.get(id);
+
+    if (!recurrence) {
+      throw new Error("Não foi possível encontrar a recorrência.");
+    }
+
+    if (recurrence.status === "concluded") {
+      throw new Error("Uma recorrência concluída não pode ser retomada.");
+    }
+
+    await db.recurringTransactions.update(id, {
+      status,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await refresh();
+
+    setNotice(
+      status === "paused"
+        ? "Recorrência pausada. A reserva futura foi removida."
+        : "Recorrência retomada com sucesso.",
+    );
+  }
+
+  async function deleteRecurring(id: number): Promise<void> {
+    const recurrence = await db.recurringTransactions.get(id);
+
+    if (!recurrence) {
+      throw new Error("Não foi possível encontrar a recorrência.");
+    }
+
+    await db.recurringTransactions.delete(id);
+
+    await refresh();
+    setNotice(
+      "Recorrência excluída. Os lançamentos anteriores foram mantidos.",
+    );
   }
 
   async function createCategory(data: {
@@ -531,16 +895,30 @@ function App() {
       throw new Error("Categoria sem identificador.");
     }
 
-    await db.transaction("rw", db.categories, db.transactions, async () => {
-      await db.categories.update(category.id!, data);
+    await db.transaction(
+      "rw",
+      db.categories,
+      db.transactions,
+      db.recurringTransactions,
+      async () => {
+        await db.categories.update(category.id!, data);
 
-      if (category.name !== data.name) {
-        await db.transactions
-          .where("category")
-          .equals(category.name)
-          .modify({ category: data.name });
-      }
-    });
+        if (category.name !== data.name) {
+          await db.transactions
+            .where("category")
+            .equals(category.name)
+            .modify({ category: data.name });
+
+          await db.recurringTransactions
+            .where("category")
+            .equals(category.name)
+            .modify({
+              category: data.name,
+              updatedAt: new Date().toISOString(),
+            });
+        }
+      },
+    );
 
     await refresh();
     setNotice("Categoria atualizada com sucesso.");
@@ -641,6 +1019,7 @@ function App() {
 
     const transactionData = {
       description,
+      title: description,
       type: transactionType,
       amount,
       date,
@@ -652,7 +1031,10 @@ function App() {
     if (editing?.id !== undefined) {
       await db.transactions.update(editing.id, transactionData);
     } else {
-      await db.transactions.add(transactionData as Transaction);
+      await db.transactions.add({
+        ...transactionData,
+        createdAt: new Date().toISOString(),
+      });
     }
 
     await refresh();
@@ -680,7 +1062,13 @@ function App() {
       return;
     }
 
-    await db.categories.add({ name } as Category);
+    await db.categories.add({
+      name,
+      description: "",
+      type: "expense",
+      icon: "tag",
+      createdAt: new Date().toISOString(),
+    });
 
     setCategoryName("");
     await refresh();
@@ -688,13 +1076,17 @@ function App() {
   }
 
   async function deleteCategory(category: Category) {
-    const used = transactions.some(
+    const usedByTransactions = transactions.some(
       (transaction) => transaction.category === category.name,
     );
 
-    if (used) {
+    const usedByRecurrences = recurrences.some(
+      (recurrence) => recurrence.category === category.name,
+    );
+
+    if (usedByTransactions || usedByRecurrences) {
       setNotice(
-        "Essa categoria está vinculada a transações e não pode ser excluída.",
+        "Essa categoria está vinculada a transações ou recorrências e não pode ser excluída.",
       );
       return;
     }
@@ -723,15 +1115,19 @@ function App() {
   }
 
   async function deleteAccount(account: Account) {
-    const used = transactions.some(
+    const usedByTransactions = transactions.some(
       (transaction) =>
         transaction.accountId === account.id ||
         transaction.destinationAccountId === account.id,
     );
 
-    if (used) {
+    const usedByRecurrences = recurrences.some(
+      (recurrence) => recurrence.accountId === account.id,
+    );
+
+    if (usedByTransactions || usedByRecurrences) {
       setNotice(
-        "Essa conta está vinculada a transações e não pode ser excluída.",
+        "Essa conta está vinculada a transações ou recorrências e não pode ser excluída.",
       );
       return;
     }
@@ -786,6 +1182,7 @@ function App() {
         {page === "dashboard" && (
           <DashboardPage
             accounts={accounts}
+            categories={categories}
             transactions={transactions}
             accountBalances={accountBalances}
             totalBalance={totalBalance}
@@ -798,6 +1195,7 @@ function App() {
             onDeleteTransaction={deleteTransaction}
           />
         )}
+
         {page === "categories" && (
           <CategoriesPage
             categories={categories}
@@ -807,6 +1205,7 @@ function App() {
             onDelete={deleteCategory}
           />
         )}
+
         {page === "accounts" && (
           <AccountsPage
             accounts={accounts}
@@ -816,14 +1215,39 @@ function App() {
             onDelete={deleteAccount}
           />
         )}
+
         {page === "transactions" && (
           <TransactionsPage
             transactions={transactions}
             accounts={accounts}
             categories={categories}
+            creditCards={creditCards}
             onCreate={createTransaction}
             onUpdate={editTransaction}
             onDelete={deleteTransaction}
+          />
+        )}
+
+        {page === "cards" && (
+          <CardsPage
+            cards={creditCards}
+            expensesByCard={expensesByCard}
+            onCreate={createCreditCard}
+            onUpdate={updateCreditCard}
+            onDelete={deleteCreditCard}
+          />
+        )}
+
+        {page === "recurring" && (
+          <RecurringPage
+            recurrences={recurrences}
+            accounts={accounts}
+            creditCards={creditCards}
+            categories={categories}
+            onCreate={createRecurring}
+            onUpdate={updateRecurring}
+            onChangeStatus={changeRecurringStatus}
+            onDelete={deleteRecurring}
           />
         )}
       </div>
